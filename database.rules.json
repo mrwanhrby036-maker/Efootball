@@ -1,63 +1,83 @@
 {
   "rules": {
+    "admins": {
+      "$adminId": {
+        ".read": "auth != null",
+        ".write": "auth != null && root.child('admins').child(auth.uid).exists()"
+      }
+    },
+    "audit": {
+      "$logId": {
+        ".read": "auth != null && root.child('admins').child(auth.uid).exists()",
+        ".write": "auth != null && root.child('admins').child(auth.uid).exists()"
+      }
+    },
+    "matches": {
+      "$matchId": {
+        ".read": "auth != null",
+        ".write": "auth != null && (!data.exists() || data.child('userId').val() === auth.uid) && (!newData.exists() || newData.child('userId').val() === auth.uid)"
+      }
+    },
+    "notifications": {
+      "$notificationId": {
+        ".read": "auth != null && (data.child('userId').val() === auth.uid || root.child('admins').child(auth.uid).exists())",
+        ".write": "auth != null && (root.child('admins').child(auth.uid).exists() || (!data.exists() && newData.child('userId').val() === auth.uid) || (data.exists() && data.child('userId').val() === auth.uid))"
+      }
+    },
+    "orders": {
+      "$orderId": {
+        ".read": "auth != null",
+        ".write": "auth != null && (!data.exists() || data.child('userId').val() === auth.uid || root.child('admins').child(auth.uid).exists())"
+      }
+    },
+    "plans": {
+      "$planId": {
+        ".read": true,
+        ".write": "auth != null && root.child('admins').child(auth.uid).exists()"
+      }
+    },
+    "products": {
+      "$productId": {
+        ".read": true,
+        ".write": "auth != null && root.child('admins').child(auth.uid).exists()"
+      }
+    },
+    "reports": {
+      "$reportId": {
+        ".read": "auth != null",
+        ".write": "auth != null && (!data.exists() || data.child('userId').val() === auth.uid) && (!newData.exists() || newData.child('userId').val() === auth.uid)"
+      }
+    },
+    "settings": {
+      "public": {
+        ".read": true,
+        ".write": "auth != null && root.child('admins').child(auth.uid).exists()"
+      },
+      "adminAccessCode": {
+        ".read": "auth != null && root.child('admins').child(auth.uid).exists()",
+        ".write": "auth != null && root.child('admins').child(auth.uid).exists()"
+      },
+      "$other": {
+        ".read": true,
+        ".write": "auth != null && root.child('admins').child(auth.uid).exists()"
+      }
+    },
+    "teams": {
+      "$teamId": {
+        ".read": "auth != null",
+        ".write": "auth != null && (!data.exists() || data.child('userId').val() === auth.uid) && (!newData.exists() || newData.child('userId').val() === auth.uid)"
+      }
+    },
     "users": {
       "$uid": {
         ".read": "auth != null",
-        ".write": "auth != null && auth.uid === $uid"
+        ".write": "auth != null && (auth.uid === $uid || root.child('admins').child(auth.uid).exists())"
       }
     },
     "userSettings": {
       "$uid": {
         ".read": "auth != null && auth.uid === $uid",
         ".write": "auth != null && auth.uid === $uid"
-      }
-    },
-    "teams": {
-      "$teamId": {
-        ".read": "auth != null",
-        ".write": "auth != null"
-      }
-    },
-    "matches": {
-      "$matchId": {
-        ".read": "auth != null",
-        ".write": "auth != null"
-      }
-    },
-    "orders": {
-      "$orderId": {
-        ".read": "auth != null",
-        ".write": "auth != null"
-      }
-    },
-    "notifications": {
-      "$notificationId": {
-        ".read": "auth != null",
-        ".write": "auth != null"
-      }
-    },
-    "reports": {
-      "$reportId": {
-        ".read": "auth != null",
-        ".write": "auth != null"
-      }
-    },
-    "settings": {
-      ".read": true,
-      ".write": "auth != null"
-    },
-    "plans": {
-      ".read": true,
-      ".write": "auth != null"
-    },
-    "products": {
-      ".read": true,
-      ".write": "auth != null"
-    },
-    "admins": {
-      "$adminId": {
-        ".read": "auth != null",
-        ".write": "auth != null"
       }
     }
   }
