@@ -349,17 +349,25 @@ class FirebaseBackend {
       const cred = await this.auth().signInWithPopup(provider);
       const u = cred.user;
       const ref = this.db().doc('users/' + u.uid);
-      const snap = await ref.get();
-      if (!snap.exists) {
-        const profile = { id: u.uid, name: u.displayName || 'مستخدم Google', phone: u.phoneNumber || '', email: u.email || '', pin_hash: null, pin_salt: null, status: 'active', plan: 'free', plan_expires_at: null, ai_usage_count: 0, created_at: nowStr(), last_login_at: nowStr() };
-        await ref.set(profile);
-        await this.db().doc('userSettings/' + u.uid).set({ notify_orders: true, notify_subscription: true, notify_platform: true, notify_ai: true, public_stats: false, marketing: false });
-        await this.db().collection('notifications').add({ userId: u.uid, type: 'welcome', title: `أهلًا بك في PES AI PRO <span class="svg-icon">${I.party}</span>`, body: 'تم إنشاء حسابك عبر Google بنجاح. ابدأ ببناء تشكيلتك أو حلّل فريقك.', link: '#/builder', is_read: false, created_at: nowStr() });
-      } else {
-        await ref.update({ last_login_at: nowStr() });
+      let p = null;
+      try {
+        const snap = await Promise.race([ref.get(), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000))]);
+        if (!snap.exists) {
+          p = { id: u.uid, name: u.displayName || 'مستخدم Google', phone: u.phoneNumber || '', email: u.email || '', pin_hash: null, pin_salt: null, status: 'active', plan: 'free', plan_expires_at: null, ai_usage_count: 0, created_at: nowStr(), last_login_at: nowStr() };
+          await ref.set(p).catch(() => {});
+          await this.db().doc('userSettings/' + u.uid).set({ notify_orders: true, notify_subscription: true, notify_platform: true, notify_ai: true, public_stats: false, marketing: false }).catch(() => {});
+        } else {
+          p = snap.data();
+          await ref.update({ last_login_at: nowStr() }).catch(() => {});
+        }
+      } catch (e) {
+        p = { id: u.uid, name: u.displayName || 'مستخدم Google', phone: u.phoneNumber || '', email: u.email || '', status: 'active', plan: 'free', created_at: nowStr(), last_login_at: nowStr() };
       }
-      const p = (await ref.get()).data();
-      return { user: await this.publicUser(p), plan: await this.planInfo(p) };
+      const pub = await this.publicUser(p);
+      const planInfo = await this.planInfo(p);
+      const res = { user: pub, plan: planInfo };
+      localStorage.setItem('pesai_user', JSON.stringify(pub));
+      return res;
     } catch (err) {
       return { error: err.message || 'فشل تسجيل الدخول بواسطة Google' };
     }
@@ -639,28 +647,41 @@ function parseHash() {
 }
 async function boot() {
   if (state.booted) return; state.booted = true;
-  loading(true);
-  try {
-    const data = await Backend.bootstrap();
-    const auth = await Backend.me().catch(() => ({ user: null }));
-    data.auth = auth;
-    state.settings = data.settings || Backend.normSettings(SEED_SETTINGS);
-    state.plans = data.plans || SEED_PLANS;
-    state.products = data.products || SEED_PRODUCTS;
-    state.user = data.auth?.user || null; state.plan = data.auth?.plan || null;
-    const f = await Backend.getFormations().catch(() => ({ formations: FORMATIONS })); state.formations = f.formations || FORMATIONS;
-    const p = await Backend.getPlayers().catch(() => ({ players: PLAYERS })); state.players = p.players || PLAYERS;
-  } catch (e) {
-    console.warn('BOOT CATCH', e);
-    state.settings = Backend.normSettings(SEED_SETTINGS);
-    state.plans = SEED_PLANS;
-    state.products = SEED_PRODUCTS;
-    state.user = null; state.plan = null;
-  }
   loading(false);
+
+  state.settings = Backend.normSettings(SEED_SETTINGS);
+  state.plans = SEED_PLANS;
+  state.products = SEED_PRODUCTS;
+  state.formations = FORMATIONS;
+  state.players = PLAYERS;
+
+  const cachedUser = localStorage.getItem('pesai_user');
+  if (cachedUser) {
+    try { state.user = JSON.parse(cachedUser); state.plan = state.plans[0]; } catch(e) {}
+  }
+
   renderShell();
   initSplash();
   renderRoute();
+
+  setTimeout(async () => {
+    try {
+      const data = await Promise.race([Backend.bootstrap(), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 2000))]).catch(() => null);
+      if (data) {
+        state.settings = data.settings || state.settings;
+        state.plans = data.plans || state.plans;
+        state.products = data.products || state.products;
+      }
+      const auth = await Promise.race([Backend.me(), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 2000))]).catch(() => null);
+      if (auth && auth.user) {
+        state.user = auth.user;
+        state.plan = auth.plan;
+        localStorage.setItem('pesai_user', JSON.stringify(auth.user));
+      }
+      renderShell();
+      renderRoute();
+    } catch(e) {}
+  }, 10);
 }
 function renderShell() {
   const bg = $('#bg-root');
