@@ -16,15 +16,8 @@ const firebaseConfig = {
   measurementId: "G-SG25P8MMEG"
 };
 
-const hasFirebase = typeof window !== 'undefined' && typeof window.firebase !== 'undefined';
-let fb = null;
-if (hasFirebase) {
-  try {
-    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-    fb = { auth: firebase.auth(), db: firebase.firestore(), storage: firebase.storage() };
-  } catch (e) { console.warn('Firebase init failed, using local mode', e); fb = null; }
-}
-let isFirebase = !!fb;
+if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+const fb = { auth: firebase.auth(), db: firebase.firestore(), storage: firebase.storage() };
 
 /* ------------------------------- helpers ------------------------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -208,23 +201,6 @@ function compareTeams(a, b) {
   const wins = rows.filter(r => r.a > r.b).length;
   return { a: A, b: B, rows, winner: wins > rows.length / 2 ? 'a' : wins < rows.length / 2 ? 'b' : 'draw', winsA: wins, winsB: rows.filter(r => r.b > r.a).length };
 }
-function localAssistant(message, ctx) {
-  const m = String(message || '').trim(), has = (...w) => w.some(x => m.includes(x));
-  const analysis = ctx.team && ctx.formationData ? analyzeLineup(ctx.formationData, ctx.players) : null;
-  const parts = [];
-  if (has('سلام', 'أهلا', 'اهلا', 'مرحبا', 'إزيك', 'ازيك')) parts.push(`أهلًا ${ctx.user ? ctx.user.name.split(' ')[0] : 'بك'} <span class="svg-icon">${I.wave}</span> أنا مساعد PES AI PRO. أقدر أساعدك في تحليل تشكيلتك، اقتراح خطة لعب، تطوير اللاعبين، وتحليل نتائج مبارياتك.`);
-  else if (has('أسعار', 'اسعار', 'سعر', 'اشترك', 'اشتراك', 'باقة', 'pro', 'PRO')) { parts.push('الباقات المتاحة:'); (ctx.plans || []).forEach(p => parts.push(`• ${p.name} — ${p.price === 0 ? 'مجانًا' : p.price + ' ج.م / ' + p.durationDays + ' يوم'}: ${(p.features || []).slice(0, 3).join('، ')}`)); parts.push('تقدر تفعّل PRO من صفحة الاشتراكات، وبعد تأكيد الدفع من الإدارة بيتفعل الاشتراك.'); }
-  else if (has('هدف', 'أهداف', 'خطة', 'تطوير', 'حسّن', 'حسن', 'تدريب')) { if (analysis) { parts.push(`تقييم فريقك الحالي ${analysis.overall}/100 (${analysis.verdict}).`); parts.push('خطة تطوير مقترحة:'); parts.push(`1) ${analysis.weaknesses[0]}`); parts.push(`2) ${analysis.suggestions[0] ? analysis.suggestions[0].title + ' — ' + analysis.suggestions[0].detail : 'حافظ على الانسجام الحالي'}`); parts.push('3) خصص 20 دقيقة يوميًا للتدرب على التمرير بين الخطوط والتسديد.'); parts.push('4) سجّل نتائج مبارياتك في صفحة تحليل المباريات.'); } else parts.push('ابنِ تشكيلتك الأول من TEAM BUILDER، وبعدها أقدر أعطيك خطة تطوير مخصصة.'); }
-  else if (has('تشكيلة', 'خطة لعب', 'أفضل لاعب', 'بديل', 'مركز')) { if (analysis) { parts.push(`تشكيلتك الحالية ${analysis.formation} بتقييم ${analysis.overall} وكيمياء ${analysis.chemistry}.`); parts.push(`• الهجوم ${analysis.attack} | الوسط ${analysis.midfield} | الدفاع ${analysis.defense} | المرمى ${analysis.gk}`); parts.push(`• نقاط القوة: ${analysis.strengths[0]}`); parts.push(`• يحتاج: ${analysis.weaknesses[0]}`); parts.push(`• ${analysis.plan}`); } else parts.push('لسه مفيش تشكيلة محفوظة. ادخل TEAM BUILDER واختار خطة وأضف اللاعبين، وأنا هقيّمها لك فورًا.'); }
-  else if (has('مباراة', 'مباريات', 'نتيجة', 'فوز', 'خسارة', 'تعادل', 'أداء')) { if (ctx.record && ctx.record.played) { const { wins, draws, losses, played } = ctx.record; parts.push(`سجل آخر ${played} مباراة: ${wins} فوز، ${draws} تعادل، ${losses} خسارة.`); if (losses > wins) parts.push('مستوى الخسائر أعلى — ركّز على صلابة الدفاع.'); else parts.push('أداء إيجابي، حافظ على نفس الخطة.'); } else parts.push('مفيش مباريات مسجلة بعد. سجّل النتيجة من صفحة MATCH ANALYSIS.'); }
-  else if (has('صورة', 'تحليل صورة', 'لقطة')) parts.push('ارفع صورة تشكيلتك من AI TEAM ANALYZER. لو المحرك البصري متفعّل هيقرأ الأسماء، ولو لأ أدخل التشكيلة يدويًا.');
-  else if (has('دعم', 'مشكلة', 'شكوى', 'تواصل', 'واتساب', 'تليجرام', 'تلغرام')) parts.push('تقدر تتواصل مع الدعم عبر أيقونة واتساب أو تليجرام. لو مشكلة في الاشتراك، ابعت رقم الطلب.');
-  else if (has('مين انت', 'من انت', 'قدراتك')) parts.push('أنا المساعد الذكي لـ PES AI PRO، متخصص في eFootball. بقرأ بيانات فريقك وتشكيلتك ومبارياتك. مش بطلب بيانات دخول اللعبة ومش بعمل أتمتة داخل اللعبة.');
-  else { parts.push(`تمام، فهمت إنك بتسأل عن: "${m.slice(0, 120)}".`); if (analysis) parts.push(`بناءً على فريقك (${analysis.formation}، تقييم ${analysis.overall}): ${analysis.suggestions[0] ? analysis.suggestions[0].detail : analysis.plan}`); else parts.push('أفضل حاجة نبدأها: ابنِ تشكيلتك في TEAM BUILDER، وبعدها أقدر أعطيك تحليل مخصص.'); }
-  if (!ctx.isPro) parts.push('<span class="svg-icon">' + I.info + '</span> أنت على الباقة المجانية (عدد محدود من الرسائل). باقة PRO تفتح المساعد غير المحدود.');
-  parts.push('<span class="svg-icon">' + I.warning + '</span> ملاحظة: هذا رد من المحرك المحلي داخل المنصة. لا تشارك بيانات دخول Konami أو أي كلمات مرور.');
-  return { text: parts.join('\n\n'), engine: 'local-rules', isLocal: true };
-}
 
 /* ------------------------------- normalizers ------------------------------- */
 const normPlan = p => ({ id: p.id, code: p.code, name: p.name, tagline: p.tagline, price: p.price, durationDays: p.durationDays != null ? p.durationDays : p.duration_days, features: typeof p.features === 'string' ? JSON.parse(p.features || '[]') : (p.features || []), isActive: p.isActive != null ? p.isActive : p.is_active, isPublic: p.isPublic != null ? p.isPublic : p.is_public, sortOrder: p.sortOrder != null ? p.sortOrder : p.sort_order });
@@ -235,72 +211,6 @@ const normOrder = o => ({ ...o, product_name: o.product_name != null ? o.product
 const normNotification = n => ({ ...n, is_read: n.is_read != null ? n.is_read : n.isRead, created_at: n.created_at != null ? n.created_at : n.createdAt });
 const normSettings = s => ({ platformName: s.platformName != null ? s.platformName : s.platform_name, tagline: s.tagline, whatsappNumber: s.whatsappNumber != null ? s.whatsappNumber : s.whatsapp_number, telegramUrl: s.telegramUrl != null ? s.telegramUrl : s.telegram_url, supportEmail: s.supportEmail != null ? s.supportEmail : s.support_email, announcement: s.announcement, paymentsNote: s.paymentsNote != null ? s.paymentsNote : s.payments_note, instapayHandle: s.instapayHandle != null ? s.instapayHandle : s.instapay_handle, vodafoneCash: s.vodafoneCash != null ? s.vodafoneCash : s.vodafone_cash, aiModel: s.aiModel != null ? s.aiModel : s.ai_model, aiEnabled: s.aiEnabled != null ? s.aiEnabled : s.ai_enabled });
 
-/* ------------------------------- local API backend ------------------------------- */
-async function api(path, opts = {}) {
-  const res = await fetch('/api' + path, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) }, ...opts, body: opts.body instanceof FormData ? opts.body : (opts.body ? JSON.stringify(opts.body) : undefined) });
-  let data = {}; try { data = await res.json(); } catch (e) { data = { error: 'استجابة غير صالحة' }; }
-  if (!res.ok && !data.error) data.error = 'خطأ ' + res.status;
-  return { ok: res.ok && data.ok !== false, status: res.status, data };
-}
-class LocalBackend {
-  constructor() { this.mode = 'local'; }
-  async bootstrap() { const r = await api('/bootstrap'); return { settings: normSettings(r.data.settings || {}), plans: (r.data.plans || []).map(normPlan), products: (r.data.products || []).map(normProduct), auth: r.data.auth }; }
-  async me() { const r = await api('/auth/me'); return r.data.auth || { user: null }; }
-  async register(d) { const r = await api('/auth/register', { method: 'POST', body: d }); return r.data.auth || r.data; }
-  async login(d) { const r = await api('/auth/login', { method: 'POST', body: d }); return r.data.requires_otp ? r.data : (r.data.auth || r.data); }
-  async logout() { await api('/auth/logout', { method: 'POST' }); }
-  async updateProfile(d) { const r = await api('/auth/profile', { method: 'PATCH', body: d }); return r.data.auth || r.data; }
-  async setPin(d) { const r = await api('/auth/pin', { method: 'PATCH', body: d }); return r.data; }
-  async removePin(d) { const r = await api('/auth/pin', { method: 'DELETE', body: d }); return r.data; }
-  async getPlans() { const r = await api('/plans'); return { plans: (r.data.plans || []).map(normPlan) }; }
-  async getProducts() { const r = await api('/products'); return { products: (r.data.products || []).map(normProduct) }; }
-  async getFormations() { const r = await api('/formations'); return r.data; }
-  async getPlayers(q) { const r = await api('/players' + (q ? '?q=' + encodeURIComponent(q) : '')); return r.data; }
-  async getTeams() { const r = await api('/teams'); return { teams: (r.data.teams || []).map(normTeam) }; }
-  async saveTeam(t) { const r = await api('/teams', { method: 'POST', body: t }); return r.data; }
-  async deleteTeam(id) { const r = await api('/teams/' + id, { method: 'DELETE' }); return r.data; }
-  async compareTeams(a, b) { const r = await api('/teams/compare', { method: 'POST', body: { a, b } }); return r.data; }
-  async suggestTeam(formation) { const r = await api('/teams/suggest', { method: 'POST', body: { formation } }); return r.data; }
-  async getMatches() { const r = await api('/matches'); const d = r.data; return { matches: (d.matches || []).map(normMatch), stats: d.stats }; }
-  async saveMatch(m) { const r = await api('/matches', { method: 'POST', body: m }); return r.data; }
-  async deleteMatch(id) { const r = await api('/matches/' + id, { method: 'DELETE' }); return r.data; }
-  async analyzeMatches() { const r = await api('/matches/analyze', { method: 'POST', body: {} }); return r.data; }
-  async analyzeTeam(formation, players) { const r = await api('/ai/analyze', { method: 'POST', body: { formation, players } }); return r.data; }
-  async assistant(message) { const r = await api('/ai/assistant', { method: 'POST', body: { message } }); return r.data; }
-  async createOrder(d) { const r = await api('/orders', { method: 'POST', body: d }); return r.data; }
-  async getOrders() { const r = await api('/orders'); return { orders: (r.data.orders || []).map(normOrder) }; }
-  async subscribe(d) { const r = await api('/subscriptions', { method: 'POST', body: d }); return r.data; }
-  async getNotifications() { const r = await api('/notifications'); const d = r.data; return { notifications: (d.notifications || []).map(normNotification), unread: d.unread || 0 }; }
-  async markNotification(id) { const r = await api('/notifications/' + id, { method: 'PATCH', body: {} }); return r.data; }
-  async markAllNotifications() { const r = await api('/notifications/read-all', { method: 'POST', body: {} }); return r.data; }
-  async uploadImage(file) { const fd = new FormData(); fd.append('image', file); const r = await api('/upload', { method: 'POST', body: fd }); return r.data; }
-  async analyzeImage(file) { const fd = new FormData(); fd.append('image', file); const r = await api('/ai/vision', { method: 'POST', body: fd }); return r.data; }
-  async getReports() { const r = await api('/ai/reports'); return { reports: r.data.reports || [] }; }
-  async updateSettings(d) { const r = await api('/auth/settings', { method: 'PATCH', body: d }); return r.data; }
-  async getSettings() { const r = await api('/auth/settings'); return { settings: r.data.settings || {} }; }
-  async deleteAccount(d) { const r = await api('/account', { method: 'DELETE', body: d }); return r.data; }
-  async recoverRequest(d) { const r = await api('/auth/recover/request', { method: 'POST', body: d }); return { ...r.data, requires_otp: true }; }
-  async recoverVerify(d) { const r = await api('/auth/recover/verify', { method: 'POST', body: d }); return r.data.auth || r.data; }
-  async adminLogin(email, password) { const r = await api('/admin/login', { method: 'POST', body: { email, password } }); return r.data; }
-  async adminVerify(email, code) { const r = await api('/admin/login/verify', { method: 'POST', body: { email, otp: code } }); return r.data; }
-  async adminMe() { const r = await api('/admin/me'); return r.data; }
-  async adminStats() { const r = await api('/admin/stats'); return r.data; }
-  async adminUsers() { const r = await api('/admin/users'); return r.data; }
-  async adminUserUpdate(id, d) { const r = await api('/admin/users/' + id, { method: 'PATCH', body: d }); return r.data; }
-  async adminPlans() { const r = await api('/admin/plans'); return { plans: (r.data.plans || []).map(normPlan) }; }
-  async adminPlanSave(id, d) { const r = id ? await api('/admin/plans/' + id, { method: 'PATCH', body: d }) : await api('/admin/plans', { method: 'POST', body: d }); return r.data; }
-  async adminPlanDelete(id) { const r = await api('/admin/plans/' + id, { method: 'DELETE' }); return r.data; }
-  async adminProducts() { const r = await api('/admin/products'); return { products: (r.data.products || []).map(normProduct) }; }
-  async adminProductSave(id, d) { const r = id ? await api('/admin/products/' + id, { method: 'PATCH', body: d }) : await api('/admin/products', { method: 'POST', body: d }); return r.data; }
-  async adminProductDelete(id) { const r = await api('/admin/products/' + id, { method: 'DELETE' }); return r.data; }
-  async adminOrders() { const r = await api('/admin/orders'); return { orders: (r.data.orders || []).map(normOrder) }; }
-  async adminOrderAction(id, action, note) { const r = await api('/admin/orders/' + id, { method: 'PATCH', body: { action, note } }); return r.data; }
-  async adminBroadcast(d) { const r = await api('/admin/notifications/broadcast', { method: 'POST', body: d }); return r.data; }
-  async adminSettings() { const r = await api('/admin/settings'); return { settings: normSettings(r.data.settings || {}), ai: r.data.ai }; }
-  async adminSettingsSave(d) { const r = await api('/admin/settings', { method: 'PUT', body: d }); return r.data; }
-  async adminAudit() { const r = await api('/admin/audit'); return r.data; }
-  async adminAi() { const r = await api('/admin/ai-usage'); return r.data; }
-}
 /* ------------------------------- Firebase backend ------------------------------- */
 class FirebaseBackend {
   constructor() { this.mode = 'firebase'; this._reg = null; this._login = null; this._recover = null; }
@@ -642,7 +552,7 @@ class FirebaseBackend {
   async adminAudit() { await this.requireAdmin(); const s = await this.docs('audit'); return { logs: s.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))).slice(0, 150) }; }
   async adminAi() { await this.requireAdmin(); const reports = await this.docs('reports'); const users = await this.docs('users'); return { total: reports.length, byKind: [...new Set(reports.map(r => r.kind))].map(k => ({ kind: k, c: reports.filter(r => r.kind === k).length })), byEngine: [...new Set(reports.map(r => r.engine))].map(e => ({ engine: e, c: reports.filter(r => r.engine === e).length })), daily: [], topUsers: users.map(u => ({ id: u.id, name: u.name, plan: u.plan, c: reports.filter(r => r.userId === u.id).length })).sort((a, b) => b.c - a.c).slice(0, 10) }; }
 }
-let Backend = isFirebase ? new FirebaseBackend() : new LocalBackend();
+let Backend = new FirebaseBackend();
 function withTimeout(p, ms) { try { p.catch(() => {}); } catch (e) { } return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('TIMEOUT')), ms))]); }
 /* ------------------------------- state + routing ------------------------------- */
 const state = { user: null, plan: null, settings: {}, plans: [], products: [], formations: FORMATIONS, players: PLAYERS, teams: [], matches: [], orders: [], notifications: [], cart: JSON.parse(localStorage.getItem('pesai_cart') || '[]'), admin: null, route: 'home', params: {}, booted: false };
@@ -664,18 +574,9 @@ async function boot() {
   if (state.booted) return; state.booted = true;
   loading(true);
   try {
-    let data;
-    try {
-      data = await withTimeout(Backend.bootstrap(), 3500);
-      const auth = await withTimeout(Backend.me(), 3500);
-      data.auth = auth;
-    } catch (e) {
-      console.warn('Firebase unavailable, switching to local mode', e);
-      Backend = new LocalBackend(); isFirebase = false;
-      data = await Backend.bootstrap();
-      data.auth = await Backend.me();
-      toast('تعذر الاتصال بـ Firebase — تم التبديل إلى الوضع المحلي', 'err');
-    }
+    const data = await withTimeout(Backend.bootstrap(), 5000);
+    const auth = await withTimeout(Backend.me(), 5000);
+    data.auth = auth;
     state.settings = data.settings || {};
     state.plans = data.plans || [];
     state.products = data.products || [];
@@ -741,7 +642,7 @@ function socialsHtml() {
 function footerHtml() {
   return `<footer class="container footer"><div>© ${new Date().getFullYear()} ${esc(state.settings.platformName || 'PES AI PRO')} — جميع الحقوق محفوظة.</div>
     <div class="flex center gap"><span class="small muted">تواصل معنا:</span>${socialsHtml()}</div>
-    <div class="small muted">${isFirebase ? 'مدعوم بـ Firebase Auth + Firestore' : 'وضع المعاينة المحلية (بيانات تجريبية)'} · الأسعار بالجنيه المصري</div></footer>`;
+    <div class="small muted">مدعوم بـ Firebase Auth + Firestore · الأسعار بالجنيه المصري</div></footer>`;
 }
 function planCard(p) {
   const current = (p.code === 'pro') === isPro();
@@ -837,7 +738,7 @@ function bindAuthForm(tab, next) {
     const f = e.target, data = { name: f.elements.name.value.trim(), phone: f.elements.phone.value.trim(), pin: f.elements.pin.value.trim(), email: f.elements.email ? f.elements.email.value.trim() : '', otp: '' };
     if (tab === 'register' && !f.elements.terms.checked) return authError('يجب الموافقة على الشروط');
     if (tab === 'login') {
-      const r = isFirebase ? await Backend.startLogin(data) : await Backend.login(data);
+      const r = await Backend.startLogin(data);
       if (r.error) return authError(r.error);
       if (r.requires_otp) { authFlow = { mode: 'login', data }; showOtpStep('loginStep', r, next); return; }
       if (r.requires_pin) { authFlow = { mode: 'login-pin' }; showPinStep('loginStep', next); return; }
@@ -845,14 +746,14 @@ function bindAuthForm(tab, next) {
       return authError('تعذر إكمال الدخول');
     }
     if (tab === 'register') {
-      const r = isFirebase ? await Backend.startRegister(data) : await Backend.register(data);
+      const r = await Backend.startRegister(data);
       if (r.error) return authError(r.error);
       if (r.requires_otp) { authFlow = { mode: 'register', data }; showOtpStep('registerStep', r, next); return; }
       if (r.user) return authSuccess(r, next);
       return authError('تعذر إنشاء الحساب');
     }
     if (tab === 'recover') {
-      const r = isFirebase ? await Backend.recoverRequest({ phone: data.phone }) : await Backend.recoverRequest(data);
+      const r = await Backend.recoverRequest({ phone: data.phone });
       if (r.error) return authError(r.error);
       if (r.requires_otp) { authFlow = { mode: 'recover', data }; showOtpStep('recoverStep', r, next); return; }
       return authError('تعذر إرسال رمز التحقق');
@@ -870,15 +771,15 @@ function showOtpStep(boxId, r, next) {
     const code = $('#otpInput').value.trim();
     if (code.length < 4) return toast('أدخل رمز التحقق', 'err');
     if (authFlow?.mode === 'register') {
-      const r = isFirebase ? await Backend.confirmRegister(code) : await Backend.login({ ...authFlow.data, otp: code });
+      const r = await Backend.confirmRegister(code);
       if (r.error) return authError(r.error);
       if (r.user) return authSuccess(r, next);
     } else if (authFlow?.mode === 'recover') {
-      const r = isFirebase ? await Backend.recoverVerify({ otp: code, pin: '' }) : await Backend.recoverVerify({ ...authFlow.data, otp: code, pin: '' });
+      const r = await Backend.recoverVerify({ otp: code, pin: '' });
       if (r.error) return authError(r.error);
       if (r.user) return authSuccess(r, next);
     } else {
-      const r = isFirebase ? await Backend.confirmLogin(code) : await Backend.login({ ...authFlow.data, otp: code });
+      const r = await Backend.confirmLogin(code);
       if (r.error) return authError(r.error);
       if (r.requires_pin) { authFlow = { mode: 'login-pin' }; showPinStep(boxId, next); return; }
       if (r.user) return authSuccess(r, next);
@@ -893,7 +794,7 @@ function showPinStep(boxId, next) {
   $('#pinInput').focus();
   $('#pinSubmit').onclick = async () => {
     const pin = $('#pinInput').value.trim();
-    const r = isFirebase ? await Backend.verifyLoginPin(pin) : await Backend.login({ ...authFlow.data, pin });
+    const r = await Backend.verifyLoginPin(pin);
     if (r.error) return authError(r.error);
     if (r.user) return authSuccess(r, next);
     authError('تعذر إكمال الدخول');
@@ -916,7 +817,7 @@ function renderAnalyzer() {
         <div id="dropZone" style="border:1.5px dashed rgba(212,175,55,.4);border-radius:16px;padding:22px;text-align:center;cursor:pointer;background:rgba(212,175,55,.03)" onclick="document.getElementById('anImage').click()"><div style="font-size:30px"><span class="svg-icon" style="width:30px;height:30px">${I.image}</span></div><div class="small mt8">اضغط لرفع صورة تشكيلة eFootball (JPG/PNG/WebP — حتى 6MB)</div><input type="file" id="anImage" accept="image/*" class="hidden" onchange="anImageChange(this)"></div>
         <div id="anPreview" class="hidden mt12" style="border-radius:14px;overflow:hidden"><img id="anPreviewImg" alt="معاينة" style="width:100%;max-height:220px;object-fit:cover"></div>
         <div class="flex gap mt12 wrap"><button class="btn btn-gold btn-sm" onclick="anAnalyzeImage()">تحليل الصورة</button><button class="btn btn-ghost btn-sm" onclick="anClearImage()">إزالة</button></div>
-        <div class="note info mt12" id="anVisionNote">${isFirebase ? 'تحليل الصور يحتاج Firebase Function + مفتاح AI. يمكنك إدخال التشكيلة يدويًا والحصول على التحليل الكامل.' : 'يتم تحليل الصور عبر الخادم. لا يتم اختراع أسماء لاعبين — إن لم تكن الصورة واضحة، استخدم الإدخال اليدوي.'}</div>
+        <div class="note info mt12" id="anVisionNote">تحليل الصور يحتاج Firebase Function + مفتاح AI. يمكنك إدخال التشكيلة يدويًا والحصول على التحليل الكامل.</div>
         <div class="divider"></div><h3 class="card-title" style="margin-top:0">2) أو أدخل التشكيلة يدويًا</h3>
         <div class="form-row"><div class="field"><label>خطة اللعب</label><select class="input" id="anFormation" onchange="anBuildSlots(this.value)">${state.formations.map(f => `<option value="${esc(f.name)}">${esc(f.name)} — ${esc(f.description || '')}</option>`).join('')}</select></div><div class="field"><label>اسم التشكيلة</label><input class="input" id="anTeamName" value="تشكيلتي الأساسية"></div></div>
         <div class="flex gap wrap mb12"><button class="btn btn-ghost btn-sm" onclick="anLoadSaved()">تحميل آخر تشكيلة</button><button class="btn btn-ghost btn-sm" onclick="anSuggest()">اقترح أفضل تشكيلة</button><button class="btn btn-ghost btn-sm" onclick="anClear()">مسح اللاعبين</button></div>
@@ -1245,14 +1146,11 @@ async function acReadAll() { await Backend.markAllNotifications(); acLoadAll(); 
 async function acReadOne(id) { await Backend.markNotification(id); acLoadAll(); loadBell(); }
 async function aLogout() { await Backend.logout(); state.user = null; state.plan = null; state.cart = []; saveCart(); toast('تم تسجيل الخروج'); renderShell(); navigate('home'); }
 function acDelete() {
-  openModal('تأكيد حذف الحساب', `<div class="note warn mb12"><div>سيتم حذف جميع بياناتك نهائيًا. لا يمكن التراجع.</div></div><div class="field"><label>اكتب كلمة "حذف" للتأكيد</label><input class="input" id="acDelConfirm"></div><div class="field"><label>${isFirebase ? 'الرمز السري (للتأكيد)' : 'رمز التحقق OTP'}</label><input class="input" id="acDelOtp" inputmode="numeric" maxlength="6"></div><div class="note info" id="acDelInfo"></div><button class="btn btn-danger btn-block mt12" id="acDelBtn">حذف نهائي</button>`);
+  openModal('تأكيد حذف الحساب', `<div class="note warn mb12"><div>سيتم حذف جميع بياناتك نهائيًا. لا يمكن التراجع.</div></div><div class="field"><label>اكتب كلمة "حذف" للتأكيد</label><input class="input" id="acDelConfirm"></div><div class="field"><label>الرمز السري (للتأكيد)</label><input class="input" id="acDelOtp" inputmode="numeric" maxlength="6"></div><div class="note info" id="acDelInfo"></div><button class="btn btn-danger btn-block mt12" id="acDelBtn">حذف نهائي</button>`);
   let stage = 0;
   $('#acDelBtn').onclick = async () => {
     const confirmText = ($('#acDelConfirm')?.value || '').trim(); if (confirmText !== 'حذف') return toast('اكتب كلمة "حذف"', 'err');
-    const payload = { confirm: 'حذف' };
-    if (isFirebase) payload.pin = ($('#acDelOtp')?.value || '').trim();
-    else if (stage === 0) payload.otp = '';
-    else payload.otp = ($('#acDelOtp')?.value || '').trim();
+    const payload = { confirm: 'حذف', pin: ($('#acDelOtp')?.value || '').trim() };
     const r = await Backend.deleteAccount(payload);
     if (r.requires_otp) { stage = 1; $('#acDelInfo').innerHTML = r.dev_code ? `رمز التحقق للتجربة: <b>${esc(r.dev_code)}</b>` : 'أدخل رمز التحقق المرسل لهاتفك'; return; }
     if (r.error) return toast(r.error, 'err');
@@ -1290,7 +1188,7 @@ async function adminLoginSubmit(e) {
     }
     if (r.admin) { state.admin = r.admin; renderAdminDash(); return; }
   }
-  const r = await withTimeout(isFirebase ? Backend.adminVerify(code) : Backend.adminVerify(adminPending?.email, code), 8000).catch(() => ({ error: 'تعذر الاتصال بخادم التحقق' }));
+  const r = await withTimeout(Backend.adminVerify(code), 8000).catch(() => ({ error: 'تعذر الاتصال بخادم التحقق' }));
   if (r.error) { if (err) { err.textContent = r.error; err.style.display = 'block'; } return; }
   state.admin = r.admin; adminPending = null; if (r.setup) toast('تم الدخول — عيّن رمز الدخول الإداري من الإعدادات', 'err'); renderAdminDash();
 }
