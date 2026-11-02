@@ -217,10 +217,38 @@ class FirebaseBackend {
   db() { return fb.db; }
   auth() { return fb.auth; }
   user() { return this.auth().currentUser; }
-  async doc(path) { const s = await this.db().doc(path).get(); return s.exists ? { id: s.id, ...s.data() } : null; }
-  async docs(path) { const s = await this.db().collection(path).get(); return s.docs.map(d => ({ id: d.id, ...d.data() })); }
-  async profile() { const u = this.user(); return u ? this.doc('users/' + u.uid) : null; }
-  async settings() { return (await this.doc('settings/public')) || { ...SEED_SETTINGS }; }
+  async doc(path) {
+    try {
+      const s = await this.db().doc(path).get();
+      return s.exists ? { id: s.id, ...s.data() } : null;
+    } catch (e) {
+      return null;
+    }
+  }
+  async docs(path) {
+    try {
+      const s = await this.db().collection(path).get();
+      return s.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (e) {
+      return [];
+    }
+  }
+  async profile() {
+    try {
+      const u = this.user();
+      return u ? this.doc('users/' + u.uid) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+  async settings() {
+    try {
+      const s = await this.doc('settings/public');
+      return s || { ...SEED_SETTINGS };
+    } catch (e) {
+      return { ...SEED_SETTINGS };
+    }
+  }
   async planInfo(profile) {
     if (!profile) return { plan: SEED_PLANS[0], subscription: null, isPro: false };
     const plans = await this.getPlans();
@@ -233,16 +261,24 @@ class FirebaseBackend {
     return { id: profile.id || this.user()?.uid, name: profile.name, phone: profile.phone, email: profile.email, has_pin: !!profile.pin_hash, status: profile.status || 'active', plan: profile.plan || 'free', plan_expires_at: profile.plan_expires_at || null, ai_usage_count: profile.ai_usage_count || 0, created_at: profile.created_at, last_login_at: profile.last_login_at };
   }
   async bootstrap() {
-    const [s, plans, products] = await Promise.all([this.settings(), this.getPlans(), this.getProducts()]);
-    return { settings: this.normSettings(s), plans, products, auth: { user: null } };
+    try {
+      const [s, plans, products] = await Promise.all([this.settings(), this.getPlans(), this.getProducts()]);
+      return { settings: this.normSettings(s), plans, products, auth: { user: null } };
+    } catch (e) {
+      return { settings: this.normSettings(SEED_SETTINGS), plans: SEED_PLANS, products: SEED_PRODUCTS, auth: { user: null } };
+    }
   }
   normSettings(s) {
     return { platform_name: s.platformName || s.platform_name || 'PES AI PRO', tagline: s.tagline || 'YOUR TEAM. YOUR POWER. YOUR AI.', whatsapp_number: s.whatsappNumber || s.whatsapp_number || '', telegram_url: s.telegramUrl || s.telegram_url || '', support_email: s.supportEmail || s.support_email || 'support@pesai.pro', announcement: s.announcement || '', payments_note: s.paymentsNote || s.payments_note || '', instapay_handle: s.instapayHandle || s.instapay_handle || '', vodafone_cash: s.vodafoneCash || s.vodafone_cash || '', ai_model: s.aiModel || s.ai_model || 'gpt-4o-mini', ai_enabled: !!s.aiEnabled };
   }
   async me() {
-    const u = this.user(); if (!u) return { user: null };
-    const p = await this.profile(); if (!p) return { user: null };
-    return { user: await this.publicUser(p), plan: await this.planInfo(p) };
+    try {
+      const u = this.user(); if (!u) return { user: null };
+      const p = await this.profile(); if (!p) return { user: null };
+      return { user: await this.publicUser(p), plan: await this.planInfo(p) };
+    } catch (e) {
+      return { user: null };
+    }
   }
   async hashPin(pin, salt) {
     const enc = new TextEncoder();
@@ -307,6 +343,27 @@ class FirebaseBackend {
     this._login = null; return res;
   }
   async logout() { await this.auth().signOut(); }
+  async loginWithGoogle() {
+    try {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      const cred = await this.auth().signInWithPopup(provider);
+      const u = cred.user;
+      const ref = this.db().doc('users/' + u.uid);
+      const snap = await ref.get();
+      if (!snap.exists) {
+        const profile = { id: u.uid, name: u.displayName || 'مستخدم Google', phone: u.phoneNumber || '', email: u.email || '', pin_hash: null, pin_salt: null, status: 'active', plan: 'free', plan_expires_at: null, ai_usage_count: 0, created_at: nowStr(), last_login_at: nowStr() };
+        await ref.set(profile);
+        await this.db().doc('userSettings/' + u.uid).set({ notify_orders: true, notify_subscription: true, notify_platform: true, notify_ai: true, public_stats: false, marketing: false });
+        await this.db().collection('notifications').add({ userId: u.uid, type: 'welcome', title: `أهلًا بك في PES AI PRO <span class="svg-icon">${I.party}</span>`, body: 'تم إنشاء حسابك عبر Google بنجاح. ابدأ ببناء تشكيلتك أو حلّل فريقك.', link: '#/builder', is_read: false, created_at: nowStr() });
+      } else {
+        await ref.update({ last_login_at: nowStr() });
+      }
+      const p = (await ref.get()).data();
+      return { user: await this.publicUser(p), plan: await this.planInfo(p) };
+    } catch (err) {
+      return { error: err.message || 'فشل تسجيل الدخول بواسطة Google' };
+    }
+  }
   async updateProfile(d) {
     const u = this.user(); if (!u) return { error: 'يجب تسجيل الدخول' };
     await this.db().doc('users/' + u.uid).update({ name: d.name, email: d.email, phone: d.phone });
@@ -584,16 +641,22 @@ async function boot() {
   if (state.booted) return; state.booted = true;
   loading(true);
   try {
-    const data = await withTimeout(Backend.bootstrap(), 5000);
-    const auth = await withTimeout(Backend.me(), 5000);
+    const data = await Backend.bootstrap();
+    const auth = await Backend.me().catch(() => ({ user: null }));
     data.auth = auth;
-    state.settings = data.settings || {};
-    state.plans = data.plans || [];
-    state.products = data.products || [];
+    state.settings = data.settings || Backend.normSettings(SEED_SETTINGS);
+    state.plans = data.plans || SEED_PLANS;
+    state.products = data.products || SEED_PRODUCTS;
     state.user = data.auth?.user || null; state.plan = data.auth?.plan || null;
-    const f = await Backend.getFormations(); state.formations = f.formations || FORMATIONS;
-    const p = await Backend.getPlayers(); state.players = p.players || PLAYERS;
-  } catch (e) { console.warn('BOOT CATCH', e); toast('خطأ في تحميل البيانات: ' + e.message, 'err'); }
+    const f = await Backend.getFormations().catch(() => ({ formations: FORMATIONS })); state.formations = f.formations || FORMATIONS;
+    const p = await Backend.getPlayers().catch(() => ({ players: PLAYERS })); state.players = p.players || PLAYERS;
+  } catch (e) {
+    console.warn('BOOT CATCH', e);
+    state.settings = Backend.normSettings(SEED_SETTINGS);
+    state.plans = SEED_PLANS;
+    state.products = SEED_PRODUCTS;
+    state.user = null; state.plan = null;
+  }
   loading(false);
   renderShell();
   initSplash();
@@ -709,12 +772,20 @@ function renderAuth(params) {
   const next = params.get('next') || 'home';
   $('#app').innerHTML = `<div class="container section"><div class="form-wrap">
     <div class="center-x mb16"><img src="images/icon.png" alt="PES AI PRO" style="width:74px;height:74px;border-radius:20px;margin:0 auto 10px;box-shadow:0 0 40px rgba(212,175,55,.3)"><h1 class="section-title">مرحبًا بك في <span>PES AI PRO</span></h1><p class="muted small">حساب واحد لكل أدوات التحليل والمتجر والاشتراكات.</p></div>
-    <div class="card"><div class="tabs"><button class="active" data-authtab="login">تسجيل الدخول</button><button data-authtab="register">حساب جديد</button><button data-authtab="recover">استعادة الحساب</button></div>
+    <div class="card">
+      <div class="mb16"><button class="btn btn-ghost btn-block" id="googleLoginBtn" style="display:flex;align-items:center;justify-content:center;gap:10px;border-color:rgba(212,175,55,.3)"><svg width="18" height="18" viewBox="0 0 24 24"><path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.8 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.1 9 5 12 5z"/><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.6h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.9z"/><path fill="#FBBC05" d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.8s.2-2.1.4-2.8L1.9 6.3C.7 8.7 0 10.3 0 12s.7 3.3 1.9 5.7l3.7-2.9z"/><path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.1-6.4-5.0L1.9 16.3C3.7 20.1 7.5 23 12 23z"/></svg>تسجيل الدخول باستخدام Google</button></div>
+      <div style="text-align:center;margin:12px 0;color:rgba(255,255,255,.4);font-size:13px">— أو عبر الهاتف —</div>
+      <div class="tabs"><button class="active" data-authtab="login">تسجيل الدخول</button><button data-authtab="register">حساب جديد</button><button data-authtab="recover">استعادة الحساب</button></div>
       <div id="authBody"></div>
       <div id="recaptcha-container" style="position:fixed;bottom:0;left:0;width:1px;height:1px;overflow:hidden"></div>
     </div>
     <p class="center-x small muted mt12">الدخول الإداري منفصل تمامًا ولا يظهر هنا. هذه الصفحة لحسابات المستخدمين فقط.</p>
   </div></div>${footerHtml()}`;
+  $('#googleLoginBtn').onclick = async () => {
+    const r = await Backend.loginWithGoogle();
+    if (r.error) return toast(r.error, 'err');
+    if (r.user) return authSuccess(r, next);
+  };
   $$('[data-authtab]').forEach(b => b.onclick = () => { $$('[data-authtab]').forEach(x => x.classList.toggle('active', x === b)); authFlow = null; renderAuthForm(b.dataset.authtab, next); });
   renderAuthForm('login', next);
 }
