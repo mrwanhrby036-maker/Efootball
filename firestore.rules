@@ -2,37 +2,37 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions
     function isAuthenticated() {
       return request.auth != null;
     }
+
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
+
     function isAdmin() {
       return isAuthenticated() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
-    // Public settings & metadata
     match /settings/public {
       allow read: if true;
       allow write: if isAdmin();
     }
+
     match /settings/adminAccessCode {
       allow read, write: if isAdmin();
     }
 
-    // Plans & Products (Public read, admin write)
     match /plans/{planId} {
       allow read: if true;
       allow write: if isAdmin();
     }
+
     match /products/{productId} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
-    // User Profiles
     match /users/{userId} {
       allow read: if isAuthenticated();
       allow create: if isOwner(userId);
@@ -40,44 +40,36 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // User Settings
     match /userSettings/{userId} {
       allow read, write: if isOwner(userId);
     }
 
-    // Teams / Squads
     match /teams/{teamId} {
       allow read, create, update, delete: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid || request.resource.data.userId == request.auth.uid);
     }
 
-    // Matches
     match /matches/{matchId} {
       allow read, create, update, delete: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid || request.resource.data.userId == request.auth.uid);
     }
 
-    // Orders & Subscriptions
     match /orders/{orderId} {
       allow read, create: if isAuthenticated();
       allow update, delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
     }
 
-    // Notifications
     match /notifications/{notificationId} {
       allow read, update: if isAuthenticated() && resource.data.userId == request.auth.uid;
       allow create, delete: if isAdmin() || (isAuthenticated() && request.resource.data.userId == request.auth.uid);
     }
 
-    // AI Reports
     match /reports/{reportId} {
       allow read, create, delete: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid || request.resource.data.userId == request.auth.uid);
     }
 
-    // Admin Audit Logs
     match /audit/{logId} {
       allow read, write: if isAdmin();
     }
 
-    // Admins Collection
     match /admins/{adminId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
