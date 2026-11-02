@@ -328,12 +328,22 @@ class FirebaseBackend {
     return { message: 'تمت إزالة الرمز' };
   }
   async getPlans() {
-    const s = await this.db().collection('plans').where('isActive', '==', true).get();
-    return s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+    try {
+      const s = await this.db().collection('plans').where('isActive', '==', true).get();
+      const plans = s.docs.map(d => ({ id: d.id, ...d.data() }));
+      return plans.length ? plans.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)) : SEED_PLANS;
+    } catch (e) {
+      return SEED_PLANS;
+    }
   }
   async getProducts() {
-    const s = await this.db().collection('products').where('isActive', '==', true).get();
-    return s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+    try {
+      const s = await this.db().collection('products').where('isActive', '==', true).get();
+      const prods = s.docs.map(d => ({ id: d.id, ...d.data() }));
+      return prods.length ? prods.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)) : SEED_PRODUCTS;
+    } catch (e) {
+      return SEED_PRODUCTS;
+    }
   }
   async getFormations() { return { formations: FORMATIONS }; }
   async getPlayers(q) { return { players: PLAYERS.filter(p => !q || p.name.toLowerCase().includes(q.toLowerCase()) || p.position.includes(q.toUpperCase())) }; }
