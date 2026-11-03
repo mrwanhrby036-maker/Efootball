@@ -16,7 +16,7 @@ const firebaseConfig = {
   measurementId: "G-SG25P8MMEG",
   /* عنوان Realtime Database — راجعه من Firebase Console ← Realtime Database
      (لو قاعدتك في منطقة تانية بيكون الشكل: https://hamo-8132e-default-rtdb.<region>.firebasedatabase.app) */
-  databaseURL: "https://hamo-8132e-default-rtdb.firebaseio.com"
+  databaseURL: "https://hamo-8132e-default-rtdb.europe-west1.firebasedatabase.app"
 };
 
 /* تحميل Firebase بشكل آمن: لو فشل تحميل SDK (شبكة/حجب) لا تتوقف الصفحة كلها */
