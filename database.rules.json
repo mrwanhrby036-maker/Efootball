@@ -1,83 +1,71 @@
 {
   "rules": {
-    "admins": {
-      "$adminId": {
-        ".read": "auth != null",
-        ".write": "auth != null && root.child('admins').child(auth.uid).exists()"
-      }
-    },
-    "audit": {
-      "$logId": {
-        ".read": "auth != null && root.child('admins').child(auth.uid).exists()",
-        ".write": "auth != null && root.child('admins').child(auth.uid).exists()"
-      }
-    },
-    "matches": {
-      "$matchId": {
-        ".read": "auth != null",
-        ".write": "auth != null && (!data.exists() || data.child('userId').val() === auth.uid) && (!newData.exists() || newData.child('userId').val() === auth.uid)"
-      }
-    },
-    "notifications": {
-      "$notificationId": {
-        ".read": "auth != null && (data.child('userId').val() === auth.uid || root.child('admins').child(auth.uid).exists())",
-        ".write": "auth != null && (root.child('admins').child(auth.uid).exists() || (!data.exists() && newData.child('userId').val() === auth.uid) || (data.exists() && data.child('userId').val() === auth.uid))"
-      }
-    },
-    "orders": {
-      "$orderId": {
-        ".read": "auth != null",
-        ".write": "auth != null && (!data.exists() || data.child('userId').val() === auth.uid || root.child('admins').child(auth.uid).exists())"
-      }
-    },
-    "plans": {
-      "$planId": {
-        ".read": true,
-        ".write": "auth != null && root.child('admins').child(auth.uid).exists()"
-      }
-    },
-    "products": {
-      "$productId": {
-        ".read": true,
-        ".write": "auth != null && root.child('admins').child(auth.uid).exists()"
-      }
-    },
-    "reports": {
-      "$reportId": {
-        ".read": "auth != null",
-        ".write": "auth != null && (!data.exists() || data.child('userId').val() === auth.uid) && (!newData.exists() || newData.child('userId').val() === auth.uid)"
-      }
-    },
     "settings": {
       "public": {
         ".read": true,
-        ".write": "auth != null && root.child('admins').child(auth.uid).exists()"
-      },
-      "adminAccessCode": {
-        ".read": "auth != null && root.child('admins').child(auth.uid).exists()",
-        ".write": "auth != null && root.child('admins').child(auth.uid).exists()"
-      },
-      "$other": {
-        ".read": true,
-        ".write": "auth != null && root.child('admins').child(auth.uid).exists()"
+        ".write": false
       }
     },
-    "teams": {
-      "$teamId": {
-        ".read": "auth != null",
-        ".write": "auth != null && (!data.exists() || data.child('userId').val() === auth.uid) && (!newData.exists() || newData.child('userId').val() === auth.uid)"
-      }
+    "plans": {
+      ".read": true,
+      ".write": false,
+      ".indexOn": ["isActive", "sortOrder"]
+    },
+    "products": {
+      ".read": true,
+      ".write": false,
+      ".indexOn": ["isActive", "sortOrder"]
     },
     "users": {
       "$uid": {
-        ".read": "auth != null",
-        ".write": "auth != null && (auth.uid === $uid || root.child('admins').child(auth.uid).exists())"
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid && (!data.exists() || !newData.exists() || (newData.child('plan').val() === data.child('plan').val() && newData.child('status').val() === data.child('status').val()))"
       }
     },
     "userSettings": {
       "$uid": {
         ".read": "auth != null && auth.uid === $uid",
         ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+    "teams": {
+      ".read": "auth != null && query.orderByChild === 'userId' && query.equalTo === auth.uid",
+      ".indexOn": ["userId"],
+      "$teamId": {
+        ".read": "auth != null && data.child('userId').val() === auth.uid",
+        ".write": "auth != null && ((!data.exists() && newData.child('userId').val() === auth.uid) || (data.exists() && data.child('userId').val() === auth.uid && (!newData.exists() || newData.child('userId').val() === auth.uid)))"
+      }
+    },
+    "matches": {
+      ".read": "auth != null && query.orderByChild === 'userId' && query.equalTo === auth.uid",
+      ".indexOn": ["userId", "match_date"],
+      "$matchId": {
+        ".read": "auth != null && data.child('userId').val() === auth.uid",
+        ".write": "auth != null && ((!data.exists() && newData.child('userId').val() === auth.uid) || (data.exists() && data.child('userId').val() === auth.uid && (!newData.exists() || newData.child('userId').val() === auth.uid)))"
+      }
+    },
+    "reports": {
+      ".read": "auth != null && query.orderByChild === 'userId' && query.equalTo === auth.uid",
+      ".indexOn": ["userId", "created_at"],
+      "$reportId": {
+        ".read": "auth != null && data.child('userId').val() === auth.uid",
+        ".write": "auth != null && ((!data.exists() && newData.child('userId').val() === auth.uid) || (data.exists() && !newData.exists() && data.child('userId').val() === auth.uid))"
+      }
+    },
+    "notifications": {
+      ".read": "auth != null && query.orderByChild === 'userId' && query.equalTo === auth.uid",
+      ".indexOn": ["userId", "created_at"],
+      "$notificationId": {
+        ".read": "auth != null && data.child('userId').val() === auth.uid",
+        ".write": "auth != null && ((!data.exists() && newData.child('userId').val() === auth.uid) || (data.exists() && data.child('userId').val() === auth.uid && (!newData.exists() || newData.child('userId').val() === auth.uid)))"
+      }
+    },
+    "orders": {
+      ".read": "auth != null && query.orderByChild === 'userId' && query.equalTo === auth.uid",
+      ".indexOn": ["userId", "created_at", "status"],
+      "$orderId": {
+        ".read": "auth != null && data.child('userId').val() === auth.uid",
+        ".write": "auth != null && ((!data.exists() && newData.child('userId').val() === auth.uid && newData.child('status').val() === 'pending_review') || (data.exists() && !newData.exists() && data.child('userId').val() === auth.uid))"
       }
     }
   }

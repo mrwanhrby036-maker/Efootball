@@ -2,7 +2,7 @@
 /* =========================================================================
    PES AI PRO — تطبيق Firebase في 3 ملفات
    index.html + styles.css + app.js + images/
-   يعمل على Firebase Hosting (Auth + Firestore + Storage)
+   يعمل على Firebase Hosting (Auth + Realtime Database + Storage)
    وعند تعذر تحميل Firebase SDK (معاينة محلية) يعمل بوضع تجريبي عبر الخادم المحلي
    ========================================================================= */
 
@@ -13,7 +13,10 @@ const firebaseConfig = {
   storageBucket: "hamo-8132e.firebasestorage.app",
   messagingSenderId: "791335303883",
   appId: "1:791335303883:web:ce5b38db63f4e92eb4b94e",
-  measurementId: "G-SG25P8MMEG"
+  measurementId: "G-SG25P8MMEG",
+  /* عنوان Realtime Database — راجعه من Firebase Console ← Realtime Database
+     (لو قاعدتك في منطقة تانية بيكون الشكل: https://hamo-8132e-default-rtdb.<region>.firebasedatabase.app) */
+  databaseURL: "https://hamo-8132e-default-rtdb.firebaseio.com"
 };
 
 /* تحميل Firebase بشكل آمن: لو فشل تحميل SDK (شبكة/حجب) لا تتوقف الصفحة كلها */
@@ -22,11 +25,11 @@ if (SDK_OK && !firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const fb = { auth: null, db: null };
 if (SDK_OK) {
   try { fb.auth = firebase.auth(); } catch (e) { console.error('Auth init failed', e); }
-  try { fb.db = firebase.firestore(); } catch (e) { console.error('Firestore init failed', e); }
-  /* كاش أوفلاين: يخلي البيانات المحفوظة تُقرأ حتى لو الشبكة وقعت، ويسرّع القراءات المتكررة */
-  if (fb.db && typeof fb.db.enablePersistence === 'function') {
-    fb.db.enablePersistence({ synchronizeTabs: true })
-      .catch(e => console.warn('Firestore offline cache disabled:', e && (e.code || e.message)));
+  try {
+    fb.db = firebase.database();          /* Realtime Database — كاش محلي مدمج يعمل أوفلاين تلقائيًا */
+  } catch (e) {
+    console.error('Realtime Database init failed', e);
+    fb.db = null;
   }
 }
 /* firebase-storage (~150KB) لا يُحمَّل إلا عند رفع صورة — أسرع في التحميل الأول */
@@ -63,6 +66,9 @@ const dateAr = s => { if (!s) return '—'; try { const d = new Date(String(s).r
 const dateTimeAr = s => { if (!s) return '—'; try { const d = new Date(String(s).replace(' ', 'T') + (String(s).includes('T') ? '' : 'Z')); return d.toLocaleString('ar-EG', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch (e) { return s; } };
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+/* Realtime Database بيرجّع المصفوفات أحيانًا كـ object (لو فيها فراغات/null) — نوحّدها لمصفوفة */
+const toArr = v => Array.isArray(v) ? v
+  : (v && typeof v === 'object' ? Object.keys(v).sort((a, b) => Number(a) - Number(b)).map(k => v[k]) : []);
 
 /* ------------------------- أدوات الأداء ورسائل الأخطاء ------------------------- */
 /* توحيد رقم الهاتف للصيغة الدولية (يمنع فشل OTP بسبب الصيغة المحلية) */
@@ -78,7 +84,7 @@ function normalizePhone(raw) {
 }
 /* تحويل أخطاء Firebase إلى رسالة عربية مفهومة بدل صمت أو إنجليزي */
 function fbErrMsg(err) {
-  const code = String((err && (err.code || err.message)) || '').toLowerCase();
+  const code = String((err && (err.code || err.message)) || '').toLowerCase().replace(/_/g, '-');
   const table = [
     ['timeout', 'الخدمة تأخرت في الرد (شبكة ضعيفة). جرّب مرة أخرى — لا تُغلق الصفحة.'],
     ['unavailable', 'تعذر الوصول لخدمات Firebase (شبكة/حجب إعلانات). تحقق من الاتصال وأعد المحاولة.'],
@@ -103,7 +109,7 @@ function fbErrMsg(err) {
     ['auth/user-not-found', 'لا يوجد حساب بهذا البريد.'],
     ['auth/email-already-in-use', 'البريد مستخدم بالفعل.'],
     ['auth/invalid-email', 'البريد الإلكتروني غير صحيح.'],
-    ['permission-denied', 'ليس لديك صلاحية لهذا الإجراء (Firestore rules).'],
+    ['permission-denied', 'ليس لديك صلاحية لهذا الإجراء (قواعد قاعدة البيانات).'],
     ['failed-precondition', 'قاعدة البيانات تحتاج فهرسًا (index) لهذا الاستعلام.']
   ];
   for (const [k, msg] of table) if (code.includes(k)) return msg;
@@ -112,16 +118,17 @@ function fbErrMsg(err) {
 }
 /* تقرير أخطاء قاعدة البيانات بدل السكوت التام (كانت كل الأخطاء تُبتلع وترجع null) */
 let _dbIssueAt = 0, _dbIssueKey = '';
-const DB_NET_CODES = /unavailable|network-request-failed|deadline-exceeded|internal|resource-exhausted|cancelled/i;
+const DB_NET_CODES = /unavailable|network|offline|disconnect|deadline|timeout|internal|exhausted|cancelled/i;
+const normDbErr = e => String((e && (e.code || e.message)) || 'unknown').toLowerCase().replace(/_/g, '-');
 function reportDbIssue(where, err) {
-  const code = String((err && (err.code || err.message)) || 'unknown');
-  console.warn('[firestore]', where, '→', code, (err && err.message) || '');
+  const code = normDbErr(err);
+  console.warn('[rtdb]', where, '→', code, (err && err.message) || '');
   const key = code.split('/').pop();
   if (key === _dbIssueKey && Date.now() - _dbIssueAt < 45000) return;   /* مانع تكرار نفس التنبيه */
   _dbIssueKey = key; _dbIssueAt = Date.now();
   try { state.dbIssue = key; } catch (e) { }
   const msg = key === 'permission-denied'
-    ? 'ليس لديك صلاحية قراءة هذه البيانات (قواعد Firestore).'
+    ? 'ليس لديك صلاحية قراءة هذه البيانات (قواعد قاعدة البيانات).'
     : (key === 'unavailable' || key === 'network-request-failed')
       ? 'تعذر الاتصال بقاعدة البيانات — تحقق من الإنترنت، وسنعيد المحاولة تلقائيًا.'
       : fbErrMsg(err);
@@ -322,8 +329,8 @@ function compareTeams(a, b) {
 }
 
 /* ------------------------------- normalizers ------------------------------- */
-const normPlan = p => ({ id: p.id, code: p.code, name: p.name, tagline: p.tagline, price: p.price, durationDays: p.durationDays != null ? p.durationDays : p.duration_days, features: typeof p.features === 'string' ? JSON.parse(p.features || '[]') : (p.features || []), isActive: p.isActive != null ? p.isActive : p.is_active, isPublic: p.isPublic != null ? p.isPublic : p.is_public, sortOrder: p.sortOrder != null ? p.sortOrder : p.sort_order });
-const normProduct = p => ({ id: p.id, name: p.name, shortDescription: p.shortDescription != null ? p.shortDescription : p.short_description, description: p.description, details: typeof p.details === 'string' ? JSON.parse(p.details || '[]') : (p.details || []), price: p.price, imageUrl: p.imageUrl != null ? p.imageUrl : p.image_url, category: p.category, badge: p.badge, isActive: p.isActive != null ? p.isActive : p.is_active, sortOrder: p.sortOrder != null ? p.sortOrder : p.sort_order });
+const normPlan = p => ({ id: p.id, code: p.code, name: p.name, tagline: p.tagline, price: p.price, durationDays: p.durationDays != null ? p.durationDays : p.duration_days, features: typeof p.features === 'string' ? JSON.parse(p.features || '[]') : toArr(p.features), isActive: p.isActive != null ? p.isActive : p.is_active, isPublic: p.isPublic != null ? p.isPublic : p.is_public, sortOrder: p.sortOrder != null ? p.sortOrder : p.sort_order });
+const normProduct = p => ({ id: p.id, name: p.name, shortDescription: p.shortDescription != null ? p.shortDescription : p.short_description, description: p.description, details: typeof p.details === 'string' ? JSON.parse(p.details || '[]') : toArr(p.details), price: p.price, imageUrl: p.imageUrl != null ? p.imageUrl : p.image_url, category: p.category, badge: p.badge, isActive: p.isActive != null ? p.isActive : p.is_active, sortOrder: p.sortOrder != null ? p.sortOrder : p.sort_order });
 const normTeam = t => ({ id: t.id, name: t.name, formation: t.formation, style: t.style, players: typeof t.players === 'string' ? JSON.parse(t.players || '[]') : (t.players || []), rating: t.rating, chemistry: t.chemistry, updated_at: t.updated_at != null ? t.updated_at : t.updatedAt });
 const normMatch = m => ({ id: m.id, opponent: m.opponent, goals_for: m.goals_for != null ? m.goals_for : m.goalsFor, goals_against: m.goals_against != null ? m.goals_against : m.goalsAgainst, competition: m.competition, match_date: m.match_date != null ? m.match_date : m.matchDate, notes: m.notes, image_url: m.image_url != null ? m.image_url : m.imageUrl, created_at: m.created_at != null ? m.created_at : m.createdAt });
 const normOrder = o => ({ ...o, product_name: o.product_name != null ? o.product_name : o.productName, plan_name: o.plan_name != null ? o.plan_name : o.planName, payment_method: o.payment_method != null ? o.payment_method : o.paymentMethod, payment_reference: o.payment_reference != null ? o.payment_reference : o.paymentReference, admin_note: o.admin_note != null ? o.admin_note : o.adminNote, created_at: o.created_at != null ? o.created_at : o.createdAt });
@@ -336,30 +343,56 @@ class FirebaseBackend {
   db() { return fb.db; }
   auth() { return fb.auth; }
   user() { return this.auth() ? this.auth().currentUser : null; }
+  /* ================== طبقة البيانات: Realtime Database ==================
+     كل التعامل مع البيانات يمر من هنا: مسار → قراءة/كتابة.
+     - once('value') بدل get()
+     - orderByChild(...).equalTo(...) بدل where(...)
+     - push() بدل add() مع مفاتيح تلقائية
+     ==================================================================== */
+  ref(path) { return this.db() ? this.db().ref(path) : null; }
+
+  /* قراءة مستند واحد */
   async doc(path, retried) {
-    if (!this.db()) return null;
+    const r = this.ref(path);
+    if (!r) return null;
     try {
-      const s = await this.db().doc(path).get();
-      return s.exists ? { id: s.id, ...s.data() } : null;
+      const snap = await r.once('value');
+      const v = snap.val();
+      if (v === null || typeof v !== 'object') return null;
+      return { id: path.split('/').pop(), ...v };
     } catch (e) {
-      const code = String((e && (e.code || e.message)) || '');
-      /* عطل شبكة مؤقت: محاولة ثانية واحدة قبل إبلاغ المستخدم */
-      if (!retried && DB_NET_CODES.test(code)) { await sleep(1200); return this.doc(path, true); }
-      reportDbIssue('doc:' + path, e);
+      if (!retried && DB_NET_CODES.test(normDbErr(e))) { await sleep(1200); return this.doc(path, true); }
+      reportDbIssue('read:' + path, e);
       return null;
     }
   }
-  async docs(path, retried) {
-    if (!this.db()) return [];
+
+  /* قراءة قائمة مفلترة (مكافئ where(child, '==', value)) */
+  async list(path, child, value, retried) {
+    const r = this.ref(path);
+    if (!r) return [];
     try {
-      const s = await this.db().collection(path).get();
-      return s.docs.map(d => ({ id: d.id, ...d.data() }));
+      const snap = await r.orderByChild(child).equalTo(value).once('value');
+      const out = [];
+      snap.forEach(c => { out.push({ id: c.key, ...c.val() }); });
+      return out;
     } catch (e) {
-      const code = String((e && (e.code || e.message)) || '');
-      if (!retried && DB_NET_CODES.test(code)) { await sleep(1200); return this.docs(path, true); }
-      reportDbIssue('col:' + path, e);
+      if (!retried && DB_NET_CODES.test(normDbErr(e))) { await sleep(1200); return this.list(path, child, value, true); }
+      reportDbIssue('query:' + path, e);
       return [];
     }
+  }
+
+  async _set(path, data) { const r = this.ref(path); if (r) await r.set(data); return path.split('/').pop(); }
+  async _update(path, data) { const r = this.ref(path); if (r) await r.update(data); return true; }
+  async _push(path, data) { const r = this.ref(path).push(); await r.set(data); return r.key; }
+  async _remove(path) { const r = this.ref(path); if (r) await r.remove(); return true; }
+  /* حذف/تعديل عدة مسارات في عملية واحدة */
+  async _multi(updates) {
+    const keys = Object.keys(updates);
+    if (!keys.length) return false;
+    await this.db().ref().update(updates);
+    return true;
   }
   async profile() {
     try {
@@ -460,9 +493,9 @@ class FirebaseBackend {
       }
       const pin = d.pin ? await this.makePin(d.pin) : {};
       const profile = { id: u.uid, name: d.name, phone: d.phone, email: d.email, pin_hash: pin.pin_hash || null, pin_salt: pin.pin_salt || null, status: 'active', plan: 'free', plan_expires_at: null, ai_usage_count: 0, created_at: nowStr(), last_login_at: nowStr() };
-      await this.db().doc('users/' + u.uid).set(profile);
-      await this.db().doc('userSettings/' + u.uid).set({ notify_orders: true, notify_subscription: true, notify_platform: true, notify_ai: true, public_stats: false, marketing: false }).catch(() => {});
-      await this.db().collection('notifications').add({ userId: u.uid, type: 'welcome', title: `أهلًا بك في PES AI PRO <span class="svg-icon">${I.party}</span>`, body: 'تم إنشاء حسابك بنجاح. ابدأ ببناء تشكيلتك أو حلّل فريقك.', link: '#/builder', is_read: false, created_at: nowStr() }).catch(() => {});
+      await this._set('users/' + u.uid, profile);
+      await this._set('userSettings/' + u.uid, { notify_orders: true, notify_subscription: true, notify_platform: true, notify_ai: true, public_stats: false, marketing: false }).catch(() => { });
+      await this._push('notifications', { userId: u.uid, type: 'welcome', title: `أهلًا بك في PES AI PRO <span class="svg-icon">${I.party}</span>`, body: 'تم إنشاء حسابك بنجاح. ابدأ ببناء تشكيلتك أو حلّل فريقك.', link: '#/builder', is_read: false, created_at: nowStr() }).catch(() => { });
       this._reg = null;
       return { user: await this.publicUser(profile), plan: await this.planInfo(profile) };
     } catch (err) {
@@ -489,7 +522,7 @@ class FirebaseBackend {
         if (!this._login.pin) { this._login.uid = u.uid; this._login.profile = p; return { requires_pin: true, name: p.name }; }
         if (!(await this.verifyPin(this._login.pin, p.pin_hash, p.pin_salt))) { await this.auth().signOut(); return { error: 'الرمز السري غير صحيح' }; }
       }
-      await this.db().doc('users/' + u.uid).update({ last_login_at: nowStr() }).catch(() => {});
+      await this._update('users/' + u.uid, { last_login_at: nowStr() }).catch(() => { });
       this._login = null;
       return { user: await this.publicUser(p), plan: await this.planInfo(p) };
     } catch (err) {
@@ -501,7 +534,7 @@ class FirebaseBackend {
     const p = this._login.profile;
     if (!/^\d{4}$/.test(String(pin || ''))) return { error: 'الرمز السري 4 أرقام' };
     if (!(await this.verifyPin(pin, p.pin_hash, p.pin_salt))) { await this.auth().signOut(); return { error: 'الرمز السري غير صحيح' }; }
-    try { await this.db().doc('users/' + this._login.uid).update({ last_login_at: nowStr() }); } catch (e) { }
+    try { await this._update('users/' + this._login.uid, { last_login_at: nowStr() }); } catch (e) { }
     const res = { user: await this.publicUser(p), plan: await this.planInfo(p) };
     this._login = null; return res;
   }
@@ -513,18 +546,17 @@ class FirebaseBackend {
       const provider = new firebase.auth.GoogleAuthProvider();
       const cred = await withTimeout(this.auth().signInWithPopup(provider), 90000);
       const u = cred.user;
-      const ref = this.db().doc('users/' + u.uid);
       let p = null;
       try {
-        const snap = await Promise.race([ref.get(), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000))]);
-        if (!snap.exists) {
+        const existing = await withTimeout(this._once('users/' + u.uid), 4000).catch(() => null);
+        if (!existing) {
           p = { id: u.uid, name: u.displayName || 'مستخدم Google', phone: u.phoneNumber || '', email: u.email || '', pin_hash: null, pin_salt: null, status: 'active', plan: 'free', plan_expires_at: null, ai_usage_count: 0, created_at: nowStr(), last_login_at: nowStr() };
-          await ref.set(p).catch(() => {});
-          await this.db().doc('userSettings/' + u.uid).set({ notify_orders: true, notify_subscription: true, notify_platform: true, notify_ai: true, public_stats: false, marketing: false }).catch(() => {});
-          await this.db().collection('notifications').add({ userId: u.uid, type: 'welcome', title: `أهلًا بك في PES AI PRO <span class="svg-icon">${I.party}</span>`, body: 'تم إنشاء حسابك عبر Google بنجاح. ابدأ ببناء تشكيلتك أو حلّل فريقك.', link: '#/builder', is_read: false, created_at: nowStr() }).catch(() => {});
+          await this._set('users/' + u.uid, p).catch(() => { });
+          await this._set('userSettings/' + u.uid, { notify_orders: true, notify_subscription: true, notify_platform: true, notify_ai: true, public_stats: false, marketing: false }).catch(() => { });
+          await this._push('notifications', { userId: u.uid, type: 'welcome', title: `أهلًا بك في PES AI PRO <span class="svg-icon">${I.party}</span>`, body: 'تم إنشاء حسابك عبر Google بنجاح. ابدأ ببناء تشكيلتك أو حلّل فريقك.', link: '#/builder', is_read: false, created_at: nowStr() }).catch(() => { });
         } else {
-          p = snap.data();
-          await ref.update({ last_login_at: nowStr() }).catch(() => {});
+          p = existing;
+          await this._update('users/' + u.uid, { last_login_at: nowStr() }).catch(() => { });
         }
       } catch (e) {
         p = { id: u.uid, name: u.displayName || 'مستخدم Google', phone: u.phoneNumber || '', email: u.email || '', status: 'active', plan: 'free', created_at: nowStr(), last_login_at: nowStr() };
@@ -540,7 +572,7 @@ class FirebaseBackend {
   }
   async updateProfile(d) {
     const u = this.user(); if (!u) return { error: 'يجب تسجيل الدخول' };
-    await this.db().doc('users/' + u.uid).update({ name: d.name, email: d.email, phone: d.phone });
+    await this._update('users/' + u.uid, { name: d.name, email: d.email, phone: d.phone });
     return { user: await this.publicUser(await this.profile()), plan: await this.planInfo(await this.profile()) };
   }
   async setPin(d) {
@@ -548,20 +580,19 @@ class FirebaseBackend {
     const p = await this.profile();
     if (p.pin_hash && !(await this.verifyPin(d.current, p.pin_hash, p.pin_salt))) return { error: 'الرمز الحالي غير صحيح' };
     const pin = await this.makePin(d.pin);
-    await this.db().doc('users/' + u.uid).update({ pin_hash: pin.pin_hash, pin_salt: pin.pin_salt });
+    await this._update('users/' + u.uid, { pin_hash: pin.pin_hash, pin_salt: pin.pin_salt });
     return { message: 'تم حفظ الرمز السري' };
   }
   async removePin(d) {
     const u = this.user(); if (!u) return { error: 'يجب تسجيل الدخول' };
     const p = await this.profile();
     if (p.pin_hash && !(await this.verifyPin(d.current, p.pin_hash, p.pin_salt))) return { error: 'الرمز الحالي غير صحيح' };
-    await this.db().doc('users/' + u.uid).update({ pin_hash: null, pin_salt: null });
+    await this._update('users/' + u.uid, { pin_hash: null, pin_salt: null });
     return { message: 'تمت إزالة الرمز' };
   }
   async getPlans() {
     try {
-      const s = await this.db().collection('plans').where('isActive', '==', true).get();
-      const plans = s.docs.map(d => ({ id: d.id, ...d.data() }));
+      const plans = await this.list('plans', 'isActive', true);
       return plans.length ? plans.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)) : SEED_PLANS;
     } catch (e) {
       return SEED_PLANS;
@@ -569,8 +600,7 @@ class FirebaseBackend {
   }
   async getProducts() {
     try {
-      const s = await this.db().collection('products').where('isActive', '==', true).get();
-      const prods = s.docs.map(d => ({ id: d.id, ...d.data() }));
+      const prods = await this.list('products', 'isActive', true);
       return prods.length ? prods.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)) : SEED_PRODUCTS;
     } catch (e) {
       return SEED_PRODUCTS;
@@ -578,7 +608,11 @@ class FirebaseBackend {
   }
   async getFormations() { return { formations: FORMATIONS }; }
   async getPlayers(q) { return { players: PLAYERS.filter(p => !q || p.name.toLowerCase().includes(q.toLowerCase()) || p.position.includes(q.toUpperCase())) }; }
-  async getTeams() { const u = this.user(); if (!u) return { teams: [] }; const s = await this.db().collection('teams').where('userId', '==', u.uid).get(); return { teams: s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || ''))) }; }
+  async getTeams() {
+    const u = this.user(); if (!u) return { teams: [] };
+    const teams = await this.list('teams', 'userId', u.uid);
+    return { teams: teams.map(t => ({ ...t, players: toArr(t.players) })).sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || ''))) };
+  }
   async saveTeam(t) {
     const u = this.user(); if (!u) return { error: 'يجب تسجيل الدخول' };
     const f = FORMATIONS.find(x => x.name === t.formation) || FORMATIONS[0];
@@ -586,22 +620,22 @@ class FirebaseBackend {
     if (!players.some(p => p && p.name)) return { error: 'أضف لاعبًا واحدًا على الأقل' };
     const a = analyzeLineup(f, players);
     const data = { userId: u.uid, name: t.name || 'تشكيلتي', formation: t.formation, style: t.style || '', players, rating: a.overall, chemistry: a.chemistry, updated_at: nowStr() };
-    if (t.id) { await this.db().doc('teams/' + t.id).update(data); return { id: t.id, analysis: a, message: 'تم تحديث التشكيلة' }; }
-    const r = await this.db().collection('teams').add({ ...data, created_at: nowStr() });
-    return { id: r.id, analysis: a, message: 'تم حفظ التشكيلة' };
+    if (t.id) { await this._update('teams/' + t.id, data); return { id: t.id, analysis: a, message: 'تم تحديث التشكيلة' }; }
+    const key = await this._push('teams', { ...data, created_at: nowStr() });
+    return { id: key, analysis: a, message: 'تم حفظ التشكيلة' };
   }
-  async deleteTeam(id) { await this.db().doc('teams/' + id).delete(); return { message: 'تم الحذف' }; }
+  async deleteTeam(id) { await this._remove('teams/' + id); return { message: 'تم الحذف' }; }
   async compareTeams(a, b) {
     const [ta, tb] = await Promise.all([this.doc('teams/' + a), this.doc('teams/' + b)]);
     if (!ta || !tb) return { error: 'التشكيلة غير موجودة' };
+    ta.players = toArr(ta.players); tb.players = toArr(tb.players);
     const fa = FORMATIONS.find(x => x.name === ta.formation) || FORMATIONS[0], fb2 = FORMATIONS.find(x => x.name === tb.formation) || FORMATIONS[0];
     return { comparison: compareTeams({ formationData: fa, players: ta.players }, { formationData: fb2, players: tb.players }), a: ta, b: tb };
   }
   async suggestTeam(formation) { const f = FORMATIONS.find(x => x.name === formation) || FORMATIONS[0]; const players = bestXI(PLAYERS, f); return { formation: f.name, players, analysis: analyzeLineup(f, players) }; }
   async getMatches() {
     const u = this.user(); if (!u) return { matches: [], stats: { played: 0, wins: 0, draws: 0, losses: 0, goals_for: 0, goals_against: 0 } };
-    const s = await this.db().collection('matches').where('userId', '==', u.uid).get();
-    const matches = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => String(b.match_date || '').localeCompare(String(a.match_date || '')));
+    const matches = (await this.list('matches', 'userId', u.uid)).sort((a, b) => String(b.match_date || '').localeCompare(String(a.match_date || '')));
     return { matches, stats: this.matchStats(matches) };
   }
   matchStats(matches) {
@@ -610,24 +644,24 @@ class FirebaseBackend {
   }
   async saveMatch(m) {
     const u = this.user(); if (!u) return { error: 'يجب تسجيل الدخول' };
-    const r = await this.db().collection('matches').add({ userId: u.uid, opponent: m.opponent, goals_for: m.goals_for, goals_against: m.goals_against, competition: m.competition || '', match_date: m.match_date || todayStr(), notes: m.notes || '', image_url: m.image_url || '', created_at: nowStr() });
-    return { id: r.id, message: 'تم حفظ المباراة' };
+    const key = await this._push('matches', { userId: u.uid, opponent: m.opponent, goals_for: m.goals_for, goals_against: m.goals_against, competition: m.competition || '', match_date: m.match_date || todayStr(), notes: m.notes || '', image_url: m.image_url || '', created_at: nowStr() });
+    return { id: key, message: 'تم حفظ المباراة' };
   }
-  async deleteMatch(id) { await this.db().doc('matches/' + id).delete(); return { message: 'تم الحذف' }; }
+  async deleteMatch(id) { await this._remove('matches/' + id); return { message: 'تم الحذف' }; }
   async analyzeMatches() {
     const { matches } = await this.getMatches();
     if (!matches.length) return { error: 'سجّل مباراة واحدة على الأقل أولًا' };
     const s = this.matchStats(matches), wins = s.wins, draws = s.draws, losses = s.losses, gf = s.goals_for, ga = s.goals_against;
     const report = { record: { played: s.played, wins, draws, losses }, goals: { scored: gf, conceded: ga, avg_scored: +(gf / s.played).toFixed(2), avg_conceded: +(ga / s.played).toFixed(2) }, win_rate: Math.round(wins / s.played * 100), weaknesses: [ga > gf ? 'خط الدفاع يستقبل أهدافًا أكثر مما يسجل الفريق.' : 'الدفاع في مستوى جيد.', losses > wins ? 'الخسائر أكثر من الانتصارات؛ جرّب خطة أكثر توازنًا.' : 'سجل النتائج إيجابي.', matches.length < 5 ? 'سجل المباريات صغير — سجّل المزيد لدقة أعلى.' : 'سجل المباريات كافٍ لتحليل موثوق.'], suggestions: ['سجّل كل مباراة فور انتهائها.', 'حسّن التشكيلة بناءً على تحليل الفريق.', 'حدد هدفًا أسبوعيًا لتقليل الأهداف المستقبلة.'], team: null, engine: 'local-rules' };
     const u = this.user();
-    await this.db().collection('reports').add({ userId: u.uid, kind: 'match', title: 'تحليل سجل المباريات', input_summary: JSON.stringify({ matches: matches.length }), result: report, confidence: 80, engine: 'local-rules', created_at: nowStr() });
+    await this._push('reports', { userId: u.uid, kind: 'match', title: 'تحليل سجل المباريات', input_summary: JSON.stringify({ matches: matches.length }), result: report, confidence: 80, engine: 'local-rules', created_at: nowStr() });
     return { report };
   }
   async usageToday() {
     const u = this.user(); if (!u) return 0;
-    const s = await this.db().collection('reports').where('userId', '==', u.uid).get();
+    const reports = await this.list('reports', 'userId', u.uid);
     const today = todayStr();
-    return s.docs.filter(d => String(d.data().created_at || '').slice(0, 10) === today).length;
+    return reports.filter(d => String(d.created_at || '').slice(0, 10) === today).length;
   }
   async analyzeTeam(formation, players) {
     const u = this.user(); if (!u) return { error: 'يجب تسجيل الدخول' };
@@ -636,8 +670,8 @@ class FirebaseBackend {
     if (!pro && used >= 5) return { error: 'وصلت للحد المجاني (5 تحليلات يوميًا). قم بالترقية إلى PRO.', upgrade: true };
     const f = FORMATIONS.find(x => x.name === formation) || FORMATIONS[0];
     const a = analyzeLineup(f, players);
-    await this.db().collection('reports').add({ userId: u.uid, kind: 'team', title: 'تحليل تشكيلة ' + f.name, input_summary: JSON.stringify(players.map(x => ({ n: x.name, p: x.position }))), result: a, confidence: a.confidence, engine: 'rules-engine', created_at: nowStr() });
-    await this.db().doc('users/' + u.uid).update({ ai_usage_count: (p.ai_usage_count || 0) + 1 });
+    await this._push('reports', { userId: u.uid, kind: 'team', title: 'تحليل تشكيلة ' + f.name, input_summary: JSON.stringify(players.map(x => ({ n: x.name, p: x.position }))), result: a, confidence: a.confidence, engine: 'rules-engine', created_at: nowStr() });
+    await this._update('users/' + u.uid, { ai_usage_count: (p.ai_usage_count || 0) + 1 });
     return { analysis: a, engine: 'rules-engine', remaining: pro ? null : Math.max(0, 5 - used - 1) };
   }
   async assistant(message) {
@@ -648,19 +682,18 @@ class FirebaseBackend {
     const [teams, { matches, stats }, plans] = await Promise.all([this.getTeams(), this.getMatches(), this.getPlans()]);
     const team = teams.teams[0]; const f = team ? (FORMATIONS.find(x => x.name === team.formation) || FORMATIONS[0]) : null;
     const reply = localAssistant(message, { user: p, plans, team, formationData: f, players: team?.players || [], record: stats, isPro: pro });
-    await this.db().collection('reports').add({ userId: u.uid, kind: 'assistant', title: 'محادثة المساعد', input_summary: message, result: reply, confidence: 60, engine: 'local-rules', created_at: nowStr() });
+    await this._push('reports', { userId: u.uid, kind: 'assistant', title: 'محادثة المساعد', input_summary: message, result: reply, confidence: 60, engine: 'local-rules', created_at: nowStr() });
     return { reply, remaining: pro ? null : Math.max(0, 3 - used - 1) };
   }
   async createOrder(d) {
     const u = this.user(); if (!u) return { error: 'يجب تسجيل الدخول' };
-    const r = await this.db().collection('orders').add({ userId: u.uid, type: d.type || 'product', product_id: d.product_id || null, plan_id: d.plan_id || null, quantity: d.quantity || 1, total: d.total, status: 'pending_review', payment_method: d.payment_method || 'manual', payment_reference: d.payment_reference || '', admin_note: '', created_at: nowStr(), updated_at: nowStr() });
-    await this.db().collection('notifications').add({ userId: u.uid, type: 'order', title: 'تم استلام طلبك', body: 'طلب #' + r.id + ' قيد مراجعة الدفع.', link: '#/account', is_read: false, created_at: nowStr() });
-    return { order_id: r.id, message: 'تم إنشاء الطلب بنجاح' };
+    const key = await this._push('orders', { userId: u.uid, type: d.type || 'product', product_id: d.product_id || null, plan_id: d.plan_id || null, quantity: d.quantity || 1, total: d.total, status: 'pending_review', payment_method: d.payment_method || 'manual', payment_reference: d.payment_reference || '', admin_note: '', created_at: nowStr(), updated_at: nowStr() });
+    await this._push('notifications', { userId: u.uid, type: 'order', title: 'تم استلام طلبك', body: 'طلب #' + key + ' قيد مراجعة الدفع.', link: '#/account', is_read: false, created_at: nowStr() }).catch(() => { });
+    return { order_id: key, message: 'تم إنشاء الطلب بنجاح' };
   }
   async getOrders() {
     const u = this.user(); if (!u) return { orders: [] };
-    const s = await this.db().collection('orders').where('userId', '==', u.uid).get();
-    const orders = s.docs.map(d => ({ id: d.id, ...d.data() }));
+    const orders = await this.list('orders', 'userId', u.uid);
     const prods = await this.getProducts(), plans = await this.getPlans();
     orders.forEach(o => { o.product_name = prods.find(p => p.id === o.product_id)?.name; o.plan_name = plans.find(p => p.id === o.plan_id)?.name; });
     return { orders: orders.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))) };
@@ -670,18 +703,24 @@ class FirebaseBackend {
     const plans = await this.getPlans(); const plan = plans.find(p => p.id === d.plan_id);
     if (!plan) return { error: 'الباقة غير متاحة' };
     if (plan.code === 'free') return { error: 'الباقة المجانية مفعّلة تلقائيًا' };
-    const r = await this.db().collection('orders').add({ userId: u.uid, type: 'subscription', plan_id: plan.id, quantity: 1, total: plan.price, status: 'pending_review', payment_method: d.payment_method || 'manual', payment_reference: d.reference || '', admin_note: '', created_at: nowStr(), updated_at: nowStr() });
-    await this.db().collection('notifications').add({ userId: u.uid, type: 'order', title: 'طلب اشتراك قيد المراجعة', body: 'طلب #' + r.id + ' — ' + plan.name + '. سيتم التفعيل بعد تأكيد الدفع.', link: '#/account', is_read: false, created_at: nowStr() });
-    return { order_id: r.id, message: 'تم إرسال الطلب. الاشتراك لا يُفعّل قبل تأكيد الدفع.' };
+    const key = await this._push('orders', { userId: u.uid, type: 'subscription', plan_id: plan.id, quantity: 1, total: plan.price, status: 'pending_review', payment_method: d.payment_method || 'manual', payment_reference: d.reference || '', admin_note: '', created_at: nowStr(), updated_at: nowStr() });
+    await this._push('notifications', { userId: u.uid, type: 'order', title: 'طلب اشتراك قيد المراجعة', body: 'طلب #' + key + ' — ' + plan.name + '. سيتم التفعيل بعد تأكيد الدفع.', link: '#/account', is_read: false, created_at: nowStr() }).catch(() => { });
+    return { order_id: key, message: 'تم إرسال الطلب. الاشتراك لا يُفعّل قبل تأكيد الدفع.' };
   }
   async getNotifications() {
     const u = this.user(); if (!u) return { notifications: [], unread: 0 };
-    const s = await this.db().collection('notifications').where('userId', '==', u.uid).get();
-    const notifications = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+    const notifications = (await this.list('notifications', 'userId', u.uid)).sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
     return { notifications, unread: notifications.filter(n => !n.is_read).length };
   }
-  async markNotification(id) { await this.db().doc('notifications/' + id).update({ is_read: true }); return { message: 'تم' }; }
-  async markAllNotifications() { const u = this.user(); const s = await this.db().collection('notifications').where('userId', '==', u.uid).where('is_read', '==', false).get(); const b = this.db().batch(); s.docs.forEach(d => b.update(d.ref, { is_read: true })); await b.commit(); return { message: 'تم' }; }
+  async markNotification(id) { await this._update('notifications/' + id, { is_read: true }); return { message: 'تم' }; }
+  async markAllNotifications() {
+    const u = this.user(); if (!u) return { message: 'تم' };
+    const items = await this.list('notifications', 'userId', u.uid);
+    /* التحديث بيتم على مسار الإشعار نفسه (مش على الحقل الفرعي) عشان قواعد الأمان تقدر تقرأ userId */
+    await Promise.all(items.filter(n => !n.is_read)
+      .map(n => this._update('notifications/' + n.id, { is_read: true }).catch(() => { })));
+    return { message: 'تم' };
+  }
   async uploadImage(file) {
     const u = this.user(); if (!u) return { error: 'يجب تسجيل الدخول' };
     if (file && file.size > 4 * 1024 * 1024) return { error: 'حجم الصورة أكبر من 4MB — اضغطها أولًا.' };
@@ -695,16 +734,22 @@ class FirebaseBackend {
     }
   }
   async analyzeImage() { return { needs_key: true, error: 'تحليل الصور بالذكاء الاصطناعي يحتاج دالة خادم (Firebase Function) مع مفتاح AI. يمكنك إدخال التشكيلة يدويًا والحصول على التحليل الكامل.' }; }
-  async getReports() { const u = this.user(); if (!u) return { reports: [] }; const s = await this.db().collection('reports').where('userId', '==', u.uid).get(); return { reports: s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))).slice(0, 40) }; }
-  async updateSettings(d) { const u = this.user(); if (!u) return { error: 'يجب تسجيل الدخول' }; await this.db().doc('userSettings/' + u.uid).set(d, { merge: true }); return { settings: d, message: 'تم حفظ الإعدادات' }; }
+  async getReports() { const u = this.user(); if (!u) return { reports: [] }; const reports = await this.list('reports', 'userId', u.uid); return { reports: reports.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))).slice(0, 40) }; }
+  async updateSettings(d) { const u = this.user(); if (!u) return { error: 'يجب تسجيل الدخول' }; await this._update('userSettings/' + u.uid, d); return { settings: d, message: 'تم حفظ الإعدادات' }; }
   async getSettings() { const u = this.user(); if (!u) return { settings: {} }; const s = await this.doc('userSettings/' + u.uid); return { settings: s || {} }; }
   async deleteAccount(d) {
     const u = this.user(); if (!u) return { error: 'يجب تسجيل الدخول' };
     const p = await this.profile();
     if (p.pin_hash && !(await this.verifyPin(d.pin || '', p.pin_hash, p.pin_salt))) return { error: 'الرمز السري غير صحيح' };
     const uid = u.uid;
-    for (const col of ['teams', 'matches', 'orders', 'notifications', 'reports']) { const s = await this.db().collection(col).where('userId', '==', uid).get(); const b = this.db().batch(); s.docs.forEach(d2 => b.delete(d2.ref)); await b.commit(); }
-    await this.db().doc('users/' + uid).delete(); await this.db().doc('userSettings/' + uid).delete();
+    const updates = {};
+    for (const col of ['teams', 'matches', 'orders', 'notifications', 'reports']) {
+      const items = await this.list(col, 'userId', uid);
+      items.forEach(x => { updates[col + '/' + x.id] = null; });
+    }
+    updates['users/' + uid] = null;
+    updates['userSettings/' + uid] = null;
+    await this._multi(updates);
     await u.delete();
     return { message: 'تم حذف الحساب' };
   }
@@ -722,8 +767,8 @@ class FirebaseBackend {
     try {
       const p = await withTimeout(this.doc('users/' + cred.user.uid), 8000);
       if (!p) { await this.auth().signOut(); return { error: 'لا يوجد حساب بهذا الرقم' }; }
-      if (d.pin) { const pin = await this.makePin(d.pin); await this.db().doc('users/' + cred.user.uid).update({ pin_hash: pin.pin_hash, pin_salt: pin.pin_salt }); }
-      else await this.db().doc('users/' + cred.user.uid).update({ pin_hash: null, pin_salt: null });
+      if (d.pin) { const pin = await this.makePin(d.pin); await this._update('users/' + cred.user.uid, { pin_hash: pin.pin_hash, pin_salt: pin.pin_salt }); }
+      else await this._update('users/' + cred.user.uid, { pin_hash: null, pin_salt: null });
       this._recover = null;
       return { user: await this.publicUser(p), plan: await this.planInfo(p), message: 'تمت استعادة الحساب' };
     } catch (err) {
@@ -789,6 +834,9 @@ async function boot() {
     toast('تعذر تحميل خدمات Firebase (شبكة/حجب). تحقق من الاتصال ثم حدّث الصفحة', 'err');
     renderRoute();
     return;
+  }
+  if (!fb.db) {
+    toast('تعذر الاتصال بـ Realtime Database — راجع databaseURL في إعدادات المشروع', 'err');
   }
 
   /* 2) بالتوازي: بيانات المنصة + التحقق من الجلسة (بدل التسلسل البطيء) */
@@ -863,7 +911,7 @@ function watchAuth() {
           } else if (!state.user && !Backend._reg) {
             /* حساب Firebase بدون ملف شخصي (فشل إنشاء الملف سابقًا) — نُنشئه الآن بدون مسح بيانات موجودة */
             const fallback = { id: user.uid, name: user.displayName || 'مستخدم', phone: user.phoneNumber || '', email: user.email || '', status: 'active', plan: 'free', created_at: nowStr(), last_login_at: nowStr() };
-            await withTimeout(Backend.db().doc('users/' + user.uid).set(fallback, { merge: true }), 8000).catch(() => { });
+            await withTimeout(Backend._update('users/' + user.uid, fallback), 8000).catch(() => { });
             state.user = await Backend.publicUser(fallback);
             state.plan = await Backend.planInfo(fallback);
             persistSession();
@@ -971,7 +1019,7 @@ function socialsHtml() {
 function footerHtml() {
   return `<footer class="container footer"><div>© ${new Date().getFullYear()} ${esc(state.settings.platformName || 'PES AI PRO')} — جميع الحقوق محفوظة.</div>
     <div class="flex center gap"><span class="small muted">تواصل معنا:</span>${socialsHtml()}</div>
-    <div class="small muted">مدعوم بـ Firebase Auth + Firestore · الأسعار بالجنيه المصري</div></footer>`;
+    <div class="small muted">مدعوم بـ Firebase Auth + Realtime Database · الأسعار بالجنيه المصري</div></footer>`;
 }
 function planCard(p) {
   const current = (p.code === 'pro') === isPro();

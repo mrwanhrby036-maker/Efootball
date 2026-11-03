@@ -10,7 +10,7 @@
 <!-- اتصال مبكر بخدمات Firebase: يوفّر ثواني في أول تحميل -->
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin>
-<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://hamo-8132e-default-rtdb.firebaseio.com" crossorigin>
 <link rel="preconnect" href="https://www.google.com" crossorigin>
 <link rel="dns-prefetch" href="https://firebaseinstallations.googleapis.com">
 <link rel="stylesheet" href="styles.css">
@@ -42,10 +42,10 @@
   <div style="padding:24px;text-align:center;color:#d4af37">يجب تفعيل JavaScript لتشغيل منصة PES AI PRO.</div>
 </noscript>
 
-<!-- Firebase SDK (compat) — defer: لا يعطّل رسم الصفحة -->
+<!-- Firebase SDK (compat) — defer: لا يعطّل رسم الصفحة. البيانات كلها على Realtime Database -->
 <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <!-- firebase-storage يُحمَّل عند الحاجة فقط (رفع صورة) لتسريع التحميل الأول -->
 <script defer src="app.js"></script>
 </body>
