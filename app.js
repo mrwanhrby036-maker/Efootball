@@ -82,6 +82,17 @@ function normalizePhone(raw) {
   if (/^0\d{8,10}$/.test(p)) return '+20' + p.slice(1);
   return p ? '+' + p : '';
 }
+/* كاشف متصفحات داخل تطبيقات أخرى (واتساب/انستجرام/فيسبوك/تيك توك...) —
+   Google يمنع OAuth بداخلها تمامًا (disallowed_useragent) مهما كتبنا كود. */
+function isInAppBrowser() {
+  const ua = navigator.userAgent || '';
+  return /FBAN|FBAV|Instagram|Line\/|MicroMessenger|TikTok|Twitter|Snapchat|WhatsApp/i.test(ua);
+}
+/* الموبايل أولى بإعادة التوجيه الكاملة (redirect) بدل النافذة المنبثقة (popup)
+   لأن الـ popup على متصفحات الموبايل غير موثوق في إرجاع نتيجة الدخول. */
+function isMobileUA() {
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+}
 /* تحويل أخطاء Firebase إلى رسالة عربية مفهومة بدل صمت أو إنجليزي */
 function fbErrMsg(err) {
   const code = String((err && (err.code || err.message)) || '').toLowerCase().replace(/_/g, '-');
@@ -539,36 +550,85 @@ class FirebaseBackend {
     this._login = null; return res;
   }
   async logout() { if (this.auth()) await this.auth().signOut(); }
-  async loginWithGoogle() {
+  /* ================== تسجيل الدخول بـ Google ==================
+     - على الموبايل: signInWithRedirect بدل signInWithPopup (popup غير موثوق
+       على متصفحات الموبايل: قد تنجح المصادقة فعليًا لكن النتيجة لا ترجع
+       للنافذة الأصلية بسبب عزل التخزين بين النافذة المنبثقة والصفحة الأصلية).
+     - داخل متصفحات التطبيقات (واتساب/انستجرام...) Google يمنع OAuth تمامًا،
+       فنوقف المحاولة ونوضّح للمستخدم بدل ما يدخل في حلقة فاشلة.
+     ============================================================= */
+  async loginWithGoogle(next) {
     try {
       if (!SDK_OK) return { error: 'خدمات Firebase لم تُحمَّل. تحقق من الاتصال ثم حدّث الصفحة.' };
-      try { await this.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL); } catch (e) { }
-      const provider = new firebase.auth.GoogleAuthProvider();
-      const cred = await withTimeout(this.auth().signInWithPopup(provider), 90000);
-      const u = cred.user;
-      let p = null;
-      try {
-        const existing = await withTimeout(this._once('users/' + u.uid), 4000).catch(() => null);
-        if (!existing) {
-          p = { id: u.uid, name: u.displayName || 'مستخدم Google', phone: u.phoneNumber || '', email: u.email || '', pin_hash: null, pin_salt: null, status: 'active', plan: 'free', plan_expires_at: null, ai_usage_count: 0, created_at: nowStr(), last_login_at: nowStr() };
-          await this._set('users/' + u.uid, p).catch(() => { });
-          await this._set('userSettings/' + u.uid, { notify_orders: true, notify_subscription: true, notify_platform: true, notify_ai: true, public_stats: false, marketing: false }).catch(() => { });
-          await this._push('notifications', { userId: u.uid, type: 'welcome', title: `أهلًا بك في PES AI PRO <span class="svg-icon">${I.party}</span>`, body: 'تم إنشاء حسابك عبر Google بنجاح. ابدأ ببناء تشكيلتك أو حلّل فريقك.', link: '#/builder', is_read: false, created_at: nowStr() }).catch(() => { });
-        } else {
-          p = existing;
-          await this._update('users/' + u.uid, { last_login_at: nowStr() }).catch(() => { });
-        }
-      } catch (e) {
-        p = { id: u.uid, name: u.displayName || 'مستخدم Google', phone: u.phoneNumber || '', email: u.email || '', status: 'active', plan: 'free', created_at: nowStr(), last_login_at: nowStr() };
+      if (isInAppBrowser()) {
+        return { error: 'لا يمكن تسجيل الدخول بـ Google من داخل متصفح هذا التطبيق. افتح الموقع في متصفح حقيقي (Chrome أو Safari) من زر القائمة ⋮ ← "فتح في المتصفح"، ثم أعد المحاولة.' };
       }
-      const pub = await this.publicUser(p);
-      const planInfo = await this.planInfo(p);
-      const res = { user: pub, plan: planInfo };
-      localStorage.setItem('pesai_user', JSON.stringify(pub));
-      return res;
+      try { await this.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL); } catch (e) { }
+      if (isMobileUA()) return await this._googleRedirect(next);
+      try {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        const cred = await withTimeout(this.auth().signInWithPopup(provider), 90000);
+        return await this._afterGoogleAuth(cred.user);
+      } catch (err) {
+        /* بعض متصفحات سطح المكتب (أو إعدادات حجب النوافذ المنبثقة) تفشل بنفس
+           الطريقة — نرجع تلقائيًا لإعادة التوجيه بدل ما نُفشل الدخول بالكامل. */
+        if (err && (err.code === 'auth/popup-blocked' || err.code === 'auth/operation-not-supported-in-this-environment' || err.code === 'auth/cancelled-popup-request')) {
+          return await this._googleRedirect(next);
+        }
+        throw err;
+      }
     } catch (err) {
       return { error: fbErrMsg(err) || 'فشل تسجيل الدخول بواسطة Google' };
     }
+  }
+  /* يبدأ إعادة توجيه كاملة للصفحة لـ Google؛ النتيجة تُستلم لاحقًا بعد
+     رجوع المستخدم عبر checkRedirectResult() عند تحميل الصفحة من جديد. */
+  async _googleRedirect(next) {
+    try { sessionStorage.setItem('pesai_redirect_next', next || 'home'); } catch (e) { }
+    const provider = new firebase.auth.GoogleAuthProvider();
+    await this.auth().signInWithRedirect(provider);
+    return { pending_redirect: true };
+  }
+  /* يُستدعى مرة واحدة عند تحميل الصفحة للتحقق من وجود نتيجة إعادة توجيه معلّقة
+     من Google (بعد _googleRedirect أعلاه). يرجّع null لو مفيش إعادة توجيه. */
+  async checkRedirectResult() {
+    if (!SDK_OK || !this.auth()) return null;
+    try {
+      const result = await withTimeout(this.auth().getRedirectResult(), 15000);
+      if (!result || !result.user) return null;
+      return await this._afterGoogleAuth(result.user);
+    } catch (err) {
+      return { error: fbErrMsg(err) };
+    }
+  }
+  /* منطق موحّد بعد نجاح مصادقة Google (سواء عبر popup أو redirect):
+     يقرأ البروفايل الحقيقي من قاعدة البيانات (أو ينشئه لو حساب جديد)،
+     ويتحقق من حالة الإيقاف بنفس منطق الدخول بالهاتف. */
+  async _afterGoogleAuth(u) {
+    let p = null;
+    try {
+      const existing = await withTimeout(this.doc('users/' + u.uid), 8000);
+      if (!existing) {
+        p = { id: u.uid, name: u.displayName || 'مستخدم Google', phone: u.phoneNumber || '', email: u.email || '', pin_hash: null, pin_salt: null, status: 'active', plan: 'free', plan_expires_at: null, ai_usage_count: 0, created_at: nowStr(), last_login_at: nowStr() };
+        await this._set('users/' + u.uid, p).catch(() => { });
+        await this._set('userSettings/' + u.uid, { notify_orders: true, notify_subscription: true, notify_platform: true, notify_ai: true, public_stats: false, marketing: false }).catch(() => { });
+        await this._push('notifications', { userId: u.uid, type: 'welcome', title: `أهلًا بك في PES AI PRO <span class="svg-icon">${I.party}</span>`, body: 'تم إنشاء حسابك عبر Google بنجاح. ابدأ ببناء تشكيلتك أو حلّل فريقك.', link: '#/builder', is_read: false, created_at: nowStr() }).catch(() => { });
+      } else {
+        if (existing.status === 'suspended') { await this.auth().signOut(); return { error: 'الحساب موقوف. تواصل مع الدعم.' }; }
+        p = existing;
+        await this._update('users/' + u.uid, { last_login_at: nowStr() }).catch(() => { });
+      }
+    } catch (e) {
+      /* فشل مؤقت في الشبكة أثناء قراءة/إنشاء البروفايل — لا نُسجّل دخولًا
+         ببيانات وهمية غير محفوظة؛ الأفضل نُبلّغ بخطأ واضح ونسمح بإعادة المحاولة. */
+      await this.auth().signOut().catch(() => { });
+      return { error: 'تعذر إكمال إعداد الحساب (مشكلة شبكة). أعد المحاولة.' };
+    }
+    const pub = await this.publicUser(p);
+    const planInfo = await this.planInfo(p);
+    const res = { user: pub, plan: planInfo };
+    try { localStorage.setItem('pesai_user', JSON.stringify(pub)); } catch (e) { }
+    return res;
   }
   async updateProfile(d) {
     const u = this.user(); if (!u) return { error: 'يجب تسجيل الدخول' };
@@ -841,6 +901,22 @@ async function boot() {
 
   /* 2) بالتوازي: بيانات المنصة + التحقق من الجلسة (بدل التسلسل البطيء) */
   refreshPublicData();
+  /* يتحقق أولًا من وجود نتيجة دخول Google معلّقة (المستخدم راجع لتوّه من
+     إعادة توجيه Google على الموبايل) قبل بدء مراقبة حالة المصادقة العادية —
+     بيحل سباق كان ممكن يفوّت إنشاء بروفايل المستخدم الجديد لمرة واحدة. */
+  try {
+    const redirectResult = await Backend.checkRedirectResult();
+    if (redirectResult) {
+      state.authReady = true;
+      if (redirectResult.error) {
+        toast(redirectResult.error, 'err');
+      } else if (redirectResult.user) {
+        let nextRoute = 'home';
+        try { nextRoute = sessionStorage.getItem('pesai_redirect_next') || 'home'; sessionStorage.removeItem('pesai_redirect_next'); } catch (e) { }
+        authSuccess(redirectResult, nextRoute);
+      }
+    }
+  } catch (e) { console.warn('google redirect check failed:', e && e.message); }
   watchAuth();
 
   /* 3) صمّام أمان: لا نُبقي المستخدم على شاشة "جارٍ التحقق" أكثر من 9 ثوانٍ */
@@ -1090,14 +1166,15 @@ function renderAuth(params) {
     if (btn.disabled) return;
     setBusy(btn, true, 'جارٍ فتح Google...');
     try {
-      const r = await Backend.loginWithGoogle();
+      const r = await Backend.loginWithGoogle(next);
+      if (r.pending_redirect) return; /* الصفحة ستنتقل لـ Google الآن — النتيجة تُستلم بعد الرجوع */
       if (r.error) return toast(r.error, 'err');
       if (r.user) return authSuccess(r, next);
       toast('تعذر إكمال الدخول بـ Google', 'err');
     } catch (err) {
       toast(fbErrMsg(err), 'err');
     } finally {
-      setBusy(btn, false);
+      if (!document.hidden) setBusy(btn, false);
     }
   };
   $$('[data-authtab]').forEach(b => b.onclick = () => { $$('[data-authtab]').forEach(x => x.classList.toggle('active', x === b)); authFlow = null; renderAuthForm(b.dataset.authtab, next); });
