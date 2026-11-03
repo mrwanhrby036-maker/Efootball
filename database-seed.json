@@ -1,0 +1,115 @@
+{
+  "settings": {
+    "public": {
+      "platformName": "PES AI PRO",
+      "tagline": "YOUR TEAM. YOUR POWER. YOUR AI.",
+      "whatsappNumber": "",
+      "telegramUrl": "",
+      "supportEmail": "support@pesai.pro",
+      "announcement": "مرحبًا بك في PES AI PRO — منصة تحليل الفرق والتشكيلات بالذكاء الاصطناعي.",
+      "paymentsNote": "الدفع الحالي يدوي بالمراجعة: أرسل رقم العملية بعد التحويل وسيتم تفعيل الطلب من الإدارة.",
+      "instapayHandle": "",
+      "vodafoneCash": "",
+      "aiModel": "gpt-4o-mini",
+      "aiEnabled": false
+    }
+  },
+  "plans": {
+    "free": {
+      "code": "free",
+      "name": "FREE",
+      "tagline": "ابدأ مجانًا",
+      "price": 0,
+      "durationDays": 365,
+      "features": ["تحليل أساسي للتشكيلة", "بناء التشكيلة على الملعب", "نصائح محدودة (3 يوميًا)", "حفظ تشكيلة واحدة", "سجل مباريات أساسي"],
+      "isActive": true,
+      "isPublic": true,
+      "sortOrder": 1
+    },
+    "pro": {
+      "code": "pro",
+      "name": "PRO",
+      "tagline": "القوة الكاملة للذكاء الاصطناعي",
+      "price": 149,
+      "durationDays": 30,
+      "features": ["تحليل متقدم للتشكيلة والصور", "مساعد ذكي متقدم غير محدود", "تقارير مفصلة قابلة للحفظ", "حفظ تشكيلات متعددة", "سجل مباريات متقدم + تحليل", "أدوات تحليل إضافية ومقارنة الفرق"],
+      "isActive": true,
+      "isPublic": true,
+      "sortOrder": 2
+    }
+  },
+  "products": {
+    "s1": {
+      "name": "تحليل تشكيلة متقدم + تقرير",
+      "shortDescription": "تقرير مفصّل بنقاط القوة والضعف وخطة اللعب",
+      "description": "خدمة تحليل رقمية متكاملة لتشكيلتك.",
+      "details": ["تحليل كامل لكل خط", "تقييم التوافق بين المراكز", "خطة لعب مقترحة", "تقرير منظم"],
+      "price": 99,
+      "imageUrl": "images/service-analysis.jpg",
+      "category": "analysis",
+      "badge": "الأكثر طلبًا",
+      "isActive": true,
+      "sortOrder": 1
+    },
+    "s2": {
+      "name": "مراجعة فيديو مباراة",
+      "shortDescription": "شاهد مبارياتك وحلّلها مع خبير تكتيكي",
+      "description": "مراجعة فيديو احترافية لمبارياتك.",
+      "details": ["مراجعة فيديو حتى 10 دقائق", "تحديد أخطاء المباراة", "توصيات تكتيكية", "ملاحظات مكتوبة"],
+      "price": 149,
+      "imageUrl": "images/efootball-hero.jpg",
+      "category": "analysis",
+      "badge": "",
+      "isActive": true,
+      "sortOrder": 2
+    },
+    "s3": {
+      "name": "بناء تشكيلة احترافية مخصصة",
+      "shortDescription": "تشكيلة كاملة مبنية على لاعبك وأسلوبك",
+      "description": "تشكيلة مخصصة بالكامل.",
+      "details": ["اختيار الخطة المناسبة", "توزيع اللاعبين", "بدائل مقترحة", "شرح طريقة اللعب"],
+      "price": 79,
+      "imageUrl": "images/bg-stadium.jpg",
+      "category": "squad",
+      "badge": "",
+      "isActive": true,
+      "sortOrder": 3
+    },
+    "s4": {
+      "name": "خطة تطوير لاعبين 30 يوم",
+      "shortDescription": "هدف أسبوعي وتمارين عملية لكل لاعب",
+      "description": "خطة تطوير عملية لمدة شهر.",
+      "details": ["خطة 4 أسابيع", "تدريبات يومية", "متابعة أسبوعية", "تعديل الخطة"],
+      "price": 199,
+      "imageUrl": "images/service-training.jpg",
+      "category": "coaching",
+      "badge": "PRO",
+      "isActive": true,
+      "sortOrder": 4
+    },
+    "s5": {
+      "name": "تحليل صورة تشكيلة + خطة لعب",
+      "shortDescription": "ارفع صورة تشكيلتك واحصل على خطة جاهزة",
+      "description": "تحليل صورة تشكيلة.",
+      "details": ["قراءة المراكز", "تقييم عام", "أفضل توزيع", "خطة لعب"],
+      "price": 49,
+      "imageUrl": "images/icon.png",
+      "category": "analysis",
+      "badge": "",
+      "isActive": true,
+      "sortOrder": 5
+    },
+    "s6": {
+      "name": "جلسة استشارية تكتيكية 30 دقيقة",
+      "shortDescription": "جلسة أونلاين مع خبير eFootball",
+      "description": "جلسة استشارية مباشرة.",
+      "details": ["جلسة 30 دقيقة", "مناقشة فريقك", "خطة مكتوبة", "متابعة أسبوع"],
+      "price": 249,
+      "imageUrl": "images/service-consultation.jpg",
+      "category": "coaching",
+      "badge": "مباشر",
+      "isActive": true,
+      "sortOrder": 6
+    }
+  }
+}

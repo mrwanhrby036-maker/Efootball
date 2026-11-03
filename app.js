@@ -2,7 +2,7 @@
 /* =========================================================================
    PES AI PRO — تطبيق Firebase في 3 ملفات
    index.html + styles.css + app.js + images/
-   يعمل على Firebase Hosting (Auth + Firestore + Storage)
+   يعمل على Firebase Hosting (Auth + Realtime Database + Storage)
    وعند تعذر تحميل Firebase SDK (معاينة محلية) يعمل بوضع تجريبي عبر الخادم المحلي
    ========================================================================= */
 
@@ -13,11 +13,46 @@ const firebaseConfig = {
   storageBucket: "hamo-8132e.firebasestorage.app",
   messagingSenderId: "791335303883",
   appId: "1:791335303883:web:ce5b38db63f4e92eb4b94e",
-  measurementId: "G-SG25P8MMEG"
+  measurementId: "G-SG25P8MMEG",
+  /* عنوان Realtime Database — راجعه من Firebase Console ← Realtime Database
+     (لو قاعدتك في منطقة تانية بيكون الشكل: https://hamo-8132e-default-rtdb.<region>.firebasedatabase.app) */
+  databaseURL: "https://hamo-8132e-default-rtdb.firebaseio.com"
 };
 
-if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-const fb = { auth: firebase.auth(), db: firebase.firestore(), storage: firebase.storage() };
+/* تحميل Firebase بشكل آمن: لو فشل تحميل SDK (شبكة/حجب) لا تتوقف الصفحة كلها */
+const SDK_OK = (typeof firebase !== 'undefined') && !!firebase && !!firebase.apps;
+if (SDK_OK && !firebase.apps.length) firebase.initializeApp(firebaseConfig);
+const fb = { auth: null, db: null };
+if (SDK_OK) {
+  try { fb.auth = firebase.auth(); } catch (e) { console.error('Auth init failed', e); }
+  try {
+    fb.db = firebase.database();          /* Realtime Database — كاش محلي مدمج يعمل أوفلاين تلقائيًا */
+  } catch (e) {
+    console.error('Realtime Database init failed', e);
+    fb.db = null;
+  }
+}
+/* firebase-storage (~150KB) لا يُحمَّل إلا عند رفع صورة — أسرع في التحميل الأول */
+let _storageSdkPromise = null;
+function loadScriptOnce(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src; s.async = true;
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('فشل تحميل مكتبة التخزين'));
+    document.head.appendChild(s);
+  });
+}
+async function storageService() {
+  if (!SDK_OK) throw new Error('خدمات Firebase غير متاحة حاليًا');
+  if (!_storageSdkPromise) {
+    _storageSdkPromise = window.firebase.storage
+      ? Promise.resolve()
+      : loadScriptOnce('https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js');
+  }
+  await _storageSdkPromise;
+  return window.firebase.app().storage();
+}
 
 /* ------------------------------- helpers ------------------------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -31,6 +66,97 @@ const dateAr = s => { if (!s) return '—'; try { const d = new Date(String(s).r
 const dateTimeAr = s => { if (!s) return '—'; try { const d = new Date(String(s).replace(' ', 'T') + (String(s).includes('T') ? '' : 'Z')); return d.toLocaleString('ar-EG', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch (e) { return s; } };
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+/* Realtime Database بيرجّع المصفوفات أحيانًا كـ object (لو فيها فراغات/null) — نوحّدها لمصفوفة */
+const toArr = v => Array.isArray(v) ? v
+  : (v && typeof v === 'object' ? Object.keys(v).sort((a, b) => Number(a) - Number(b)).map(k => v[k]) : []);
+
+/* ------------------------- أدوات الأداء ورسائل الأخطاء ------------------------- */
+/* توحيد رقم الهاتف للصيغة الدولية (يمنع فشل OTP بسبب الصيغة المحلية) */
+function normalizePhone(raw) {
+  let p = String(raw || '').replace(/[^\d+]/g, '');
+  if (p.startsWith('00')) p = '+' + p.slice(2);
+  if (p.startsWith('+')) return p;
+  if (/^01\d{9}$/.test(p)) return '+20' + p.slice(1);      // 01xxxxxxxxx مصري
+  if (/^1\d{9}$/.test(p)) return '+20' + p;                 // 1xxxxxxxxx بدون صفر
+  if (/^20\d{10}$/.test(p)) return '+' + p;                 // 20xxxxxxxxxx
+  if (/^0\d{8,10}$/.test(p)) return '+20' + p.slice(1);
+  return p ? '+' + p : '';
+}
+/* تحويل أخطاء Firebase إلى رسالة عربية مفهومة بدل صمت أو إنجليزي */
+function fbErrMsg(err) {
+  const code = String((err && (err.code || err.message)) || '').toLowerCase().replace(/_/g, '-');
+  const table = [
+    ['timeout', 'الخدمة تأخرت في الرد (شبكة ضعيفة). جرّب مرة أخرى — لا تُغلق الصفحة.'],
+    ['unavailable', 'تعذر الوصول لخدمات Firebase (شبكة/حجب إعلانات). تحقق من الاتصال وأعد المحاولة.'],
+    ['auth/invalid-phone-number', 'رقم الهاتف غير صحيح. اكتبه بالصيغة الدولية: +201012345678.'],
+    ['auth/missing-phone-number', 'اكتب رقم الهاتف أولًا.'],
+    ['auth/too-many-requests', 'محاولات كثيرة على هذا الرقم. انتظر بضع دقائق ثم أعد المحاولة.'],
+    ['auth/quota-exceeded', 'تم استهلاك حد رسائل التحقق اليومي للمنصة. جرّب لاحقًا أو استخدم الدخول بحساب Google.'],
+    ['auth/operation-not-allowed', 'الدخول بالهاتف غير مفعّل في Firebase (Phone sign-in). فعّله من Firebase Console أو استخدم الدخول بحساب Google.'],
+    ['auth/unauthorized-domain', 'هذا النطاق غير مصرّح به في Firebase. أضفه من Authentication ← Settings ← Authorized domains.'],
+    ['auth/captcha-check-failed', 'فشل التحقق الأمني (reCAPTCHA). حدّث الصفحة وأعد المحاولة.'],
+    ['auth/invalid-app-credential', 'فشل التحقق الأمني للجهاز. حدّث الصفحة أو جرّب متصفحًا آخر (لا تستخدم وضع التصفح الخاص).'],
+    ['auth/invalid-verification-code', 'رمز التحقق غير صحيح. راجع الرقم وأعد المحاولة.'],
+    ['auth/code-expired', 'انتهت صلاحية رمز التحقق. اضغط إعادة الإرسال.'],
+    ['auth/network-request-failed', 'الشبكة ضعيفة أو مقطوعة. تحقق من الإنترنت وأعد المحاولة.'],
+    ['auth/web-storage-unsupported', 'المتصفح يمنع التخزين (وضع خاص/إعدادات صارمة). اسمح بالملفات المؤقتة.'],
+    ['auth/popup-blocked', 'المتصفح منع نافذة Google. اسمح بالنوافذ المنبثقة وأعد المحاولة.'],
+    ['auth/popup-closed-by-user', 'أُغلقت نافذة Google قبل إكمال الدخول.'],
+    ['auth/cancelled-popup-request', 'تم إلغاء نافذة Google. أعد المحاولة.'],
+    ['auth/internal-error', 'خطأ داخلي من خدمة المصادقة. أعد المحاولة بعد تحديث الصفحة.'],
+    ['auth/user-disabled', 'الحساب موقوف. تواصل مع الدعم.'],
+    ['auth/wrong-password', 'كلمة المرور غير صحيحة.'],
+    ['auth/user-not-found', 'لا يوجد حساب بهذا البريد.'],
+    ['auth/email-already-in-use', 'البريد مستخدم بالفعل.'],
+    ['auth/invalid-email', 'البريد الإلكتروني غير صحيح.'],
+    ['permission-denied', 'ليس لديك صلاحية لهذا الإجراء (قواعد قاعدة البيانات).'],
+    ['failed-precondition', 'قاعدة البيانات تحتاج فهرسًا (index) لهذا الاستعلام.']
+  ];
+  for (const [k, msg] of table) if (code.includes(k)) return msg;
+  const raw = (err && (err.message || err.code)) || 'حدث خطأ غير متوقع';
+  return String(raw);
+}
+/* تقرير أخطاء قاعدة البيانات بدل السكوت التام (كانت كل الأخطاء تُبتلع وترجع null) */
+let _dbIssueAt = 0, _dbIssueKey = '';
+const DB_NET_CODES = /unavailable|network|offline|disconnect|deadline|timeout|internal|exhausted|cancelled/i;
+const normDbErr = e => String((e && (e.code || e.message)) || 'unknown').toLowerCase().replace(/_/g, '-');
+function reportDbIssue(where, err) {
+  const code = normDbErr(err);
+  console.warn('[rtdb]', where, '→', code, (err && err.message) || '');
+  const key = code.split('/').pop();
+  if (key === _dbIssueKey && Date.now() - _dbIssueAt < 45000) return;   /* مانع تكرار نفس التنبيه */
+  _dbIssueKey = key; _dbIssueAt = Date.now();
+  try { state.dbIssue = key; } catch (e) { }
+  const msg = key === 'permission-denied'
+    ? 'ليس لديك صلاحية قراءة هذه البيانات (قواعد قاعدة البيانات).'
+    : (key === 'unavailable' || key === 'network-request-failed')
+      ? 'تعذر الاتصال بقاعدة البيانات — تحقق من الإنترنت، وسنعيد المحاولة تلقائيًا.'
+      : fbErrMsg(err);
+  try { toast(msg, 'err'); } catch (e) { }
+}
+/* زر يتغيّر لشكل "جارٍ التنفيذ" ويمنع الضغط المزدوج */
+function setBusy(btn, busy, label) {
+  if (!btn) return;
+  if (busy) {
+    if (!btn.dataset.label) btn.dataset.label = btn.innerHTML;
+    btn.disabled = true;
+    btn.style.opacity = '.75';
+    btn.innerHTML = `<span class="spinner" style="width:15px;height:15px;display:inline-block;vertical-align:-3px;margin-inline-end:7px"></span>${esc(label || 'جارٍ التنفيذ...')}`;
+  } else {
+    btn.disabled = false;
+    btn.style.opacity = '';
+    if (btn.dataset.label) { btn.innerHTML = btn.dataset.label; delete btn.dataset.label; }
+  }
+}
+function persistSession() {
+  try {
+    if (state.user) localStorage.setItem('pesai_user', JSON.stringify(state.user)); else localStorage.removeItem('pesai_user');
+    if (state.user && state.plan) localStorage.setItem('pesai_plan', JSON.stringify(state.plan)); else localStorage.removeItem('pesai_plan');
+  } catch (e) { }
+}
+function clearSession() {
+  try { localStorage.removeItem('pesai_user'); localStorage.removeItem('pesai_plan'); } catch (e) { }
+}
 
 function toast(msg, type = 'ok') {
   const root = $('#toast-root'); if (!root) return;
@@ -203,8 +329,8 @@ function compareTeams(a, b) {
 }
 
 /* ------------------------------- normalizers ------------------------------- */
-const normPlan = p => ({ id: p.id, code: p.code, name: p.name, tagline: p.tagline, price: p.price, durationDays: p.durationDays != null ? p.durationDays : p.duration_days, features: typeof p.features === 'string' ? JSON.parse(p.features || '[]') : (p.features || []), isActive: p.isActive != null ? p.isActive : p.is_active, isPublic: p.isPublic != null ? p.isPublic : p.is_public, sortOrder: p.sortOrder != null ? p.sortOrder : p.sort_order });
-const normProduct = p => ({ id: p.id, name: p.name, shortDescription: p.shortDescription != null ? p.shortDescription : p.short_description, description: p.description, details: typeof p.details === 'string' ? JSON.parse(p.details || '[]') : (p.details || []), price: p.price, imageUrl: p.imageUrl != null ? p.imageUrl : p.image_url, category: p.category, badge: p.badge, isActive: p.isActive != null ? p.isActive : p.is_active, sortOrder: p.sortOrder != null ? p.sortOrder : p.sort_order });
+const normPlan = p => ({ id: p.id, code: p.code, name: p.name, tagline: p.tagline, price: p.price, durationDays: p.durationDays != null ? p.durationDays : p.duration_days, features: typeof p.features === 'string' ? JSON.parse(p.features || '[]') : toArr(p.features), isActive: p.isActive != null ? p.isActive : p.is_active, isPublic: p.isPublic != null ? p.isPublic : p.is_public, sortOrder: p.sortOrder != null ? p.sortOrder : p.sort_order });
+const normProduct = p => ({ id: p.id, name: p.name, shortDescription: p.shortDescription != null ? p.shortDescription : p.short_description, description: p.description, details: typeof p.details === 'string' ? JSON.parse(p.details || '[]') : toArr(p.details), price: p.price, imageUrl: p.imageUrl != null ? p.imageUrl : p.image_url, category: p.category, badge: p.badge, isActive: p.isActive != null ? p.isActive : p.is_active, sortOrder: p.sortOrder != null ? p.sortOrder : p.sort_order });
 const normTeam = t => ({ id: t.id, name: t.name, formation: t.formation, style: t.style, players: typeof t.players === 'string' ? JSON.parse(t.players || '[]') : (t.players || []), rating: t.rating, chemistry: t.chemistry, updated_at: t.updated_at != null ? t.updated_at : t.updatedAt });
 const normMatch = m => ({ id: m.id, opponent: m.opponent, goals_for: m.goals_for != null ? m.goals_for : m.goalsFor, goals_against: m.goals_against != null ? m.goals_against : m.goalsAgainst, competition: m.competition, match_date: m.match_date != null ? m.match_date : m.matchDate, notes: m.notes, image_url: m.image_url != null ? m.image_url : m.imageUrl, created_at: m.created_at != null ? m.created_at : m.createdAt });
 const normOrder = o => ({ ...o, product_name: o.product_name != null ? o.product_name : o.productName, plan_name: o.plan_name != null ? o.plan_name : o.planName, payment_method: o.payment_method != null ? o.payment_method : o.paymentMethod, payment_reference: o.payment_reference != null ? o.payment_reference : o.paymentReference, admin_note: o.admin_note != null ? o.admin_note : o.adminNote, created_at: o.created_at != null ? o.created_at : o.createdAt });
@@ -216,22 +342,57 @@ class FirebaseBackend {
   constructor() { this.mode = 'firebase'; this._reg = null; this._login = null; this._recover = null; }
   db() { return fb.db; }
   auth() { return fb.auth; }
-  user() { return this.auth().currentUser; }
-  async doc(path) {
+  user() { return this.auth() ? this.auth().currentUser : null; }
+  /* ================== طبقة البيانات: Realtime Database ==================
+     كل التعامل مع البيانات يمر من هنا: مسار → قراءة/كتابة.
+     - once('value') بدل get()
+     - orderByChild(...).equalTo(...) بدل where(...)
+     - push() بدل add() مع مفاتيح تلقائية
+     ==================================================================== */
+  ref(path) { return this.db() ? this.db().ref(path) : null; }
+
+  /* قراءة مستند واحد */
+  async doc(path, retried) {
+    const r = this.ref(path);
+    if (!r) return null;
     try {
-      const s = await this.db().doc(path).get();
-      return s.exists ? { id: s.id, ...s.data() } : null;
+      const snap = await r.once('value');
+      const v = snap.val();
+      if (v === null || typeof v !== 'object') return null;
+      return { id: path.split('/').pop(), ...v };
     } catch (e) {
+      if (!retried && DB_NET_CODES.test(normDbErr(e))) { await sleep(1200); return this.doc(path, true); }
+      reportDbIssue('read:' + path, e);
       return null;
     }
   }
-  async docs(path) {
+
+  /* قراءة قائمة مفلترة (مكافئ where(child, '==', value)) */
+  async list(path, child, value, retried) {
+    const r = this.ref(path);
+    if (!r) return [];
     try {
-      const s = await this.db().collection(path).get();
-      return s.docs.map(d => ({ id: d.id, ...d.data() }));
+      const snap = await r.orderByChild(child).equalTo(value).once('value');
+      const out = [];
+      snap.forEach(c => { out.push({ id: c.key, ...c.val() }); });
+      return out;
     } catch (e) {
+      if (!retried && DB_NET_CODES.test(normDbErr(e))) { await sleep(1200); return this.list(path, child, value, true); }
+      reportDbIssue('query:' + path, e);
       return [];
     }
+  }
+
+  async _set(path, data) { const r = this.ref(path); if (r) await r.set(data); return path.split('/').pop(); }
+  async _update(path, data) { const r = this.ref(path); if (r) await r.update(data); return true; }
+  async _push(path, data) { const r = this.ref(path).push(); await r.set(data); return r.key; }
+  async _remove(path) { const r = this.ref(path); if (r) await r.remove(); return true; }
+  /* حذف/تعديل عدة مسارات في عملية واحدة */
+  async _multi(updates) {
+    const keys = Object.keys(updates);
+    if (!keys.length) return false;
+    await this.db().ref().update(updates);
+    return true;
   }
   async profile() {
     try {
@@ -289,77 +450,113 @@ class FirebaseBackend {
   async makePin(pin) { const salt = uid(); return { pin_hash: await this.hashPin(pin, salt), pin_salt: salt }; }
   async verifyPin(pin, hash, salt) { return hash === (await this.hashPin(pin, salt)); }
   recaptcha() {
-    if (!document.getElementById('recaptcha-container')) throw new Error('recaptcha-container missing');
+    if (!SDK_OK) throw new Error('خدمات Firebase غير متاحة');
+    if (!document.getElementById('recaptcha-container')) {
+      const box = document.createElement('div');
+      box.id = 'recaptcha-container';
+      box.style.cssText = 'position:fixed;bottom:0;left:0;width:1px;height:1px;overflow:hidden';
+      document.body.appendChild(box);
+    }
     if (this._verifier) { try { this._verifier.clear(); } catch (e) { } }
     this._verifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', { size: 'invisible' });
     return this._verifier;
   }
+  /* غلاف موحّد لطلبات الهاتف: يمنع تعليق الواجهة ويرجّع رسالة مفهومة */
+  async _phoneStart(phone) {
+    try {
+      if (!SDK_OK) return { error: 'خدمات Firebase لم تُحمَّل. تحقق من الاتصال بالإنترنت ثم حدّث الصفحة.' };
+      const verifier = this.recaptcha();
+      const confirmation = await withTimeout(this.auth().signInWithPhoneNumber(phone, verifier), 45000);
+      return { confirmation };
+    } catch (err) {
+      return { error: fbErrMsg(err) };
+    }
+  }
   async startRegister(data) {
-    const verifier = this.recaptcha();
-    const confirmation = await this.auth().signInWithPhoneNumber(data.phone, verifier);
-    this._reg = { confirmation, data };
+    const r = await this._phoneStart(data.phone);
+    if (r.error) return { error: r.error };
+    this._reg = { confirmation: r.confirmation, data };
     return { requires_otp: true, delivery: { delivered: true, channel: 'sms' }, message: 'أدخل رمز التحقق المرسل إلى هاتفك' };
   }
   async confirmRegister(code) {
-    if (!this._reg) return { error: 'انتهت الجلسة، أعد المحاولة' };
-    const cred = await this._reg.confirmation.confirm(code);
+    if (!this._reg) return { error: 'انتهت جلسة التحقق، أعد المحاولة من البداية' };
+    let cred;
+    try { cred = await withTimeout(this._reg.confirmation.confirm(code), 30000); }
+    catch (err) { return { error: fbErrMsg(err) }; }
     const u = cred.user, d = this._reg.data;
-    const pin = d.pin ? await this.makePin(d.pin) : {};
-    const profile = { id: u.uid, name: d.name, phone: d.phone, email: d.email, pin_hash: pin.pin_hash || null, pin_salt: pin.pin_salt || null, status: 'active', plan: 'free', plan_expires_at: null, ai_usage_count: 0, created_at: nowStr(), last_login_at: nowStr() };
-    await this.db().doc('users/' + u.uid).set(profile);
-    await this.db().doc('userSettings/' + u.uid).set({ notify_orders: true, notify_subscription: true, notify_platform: true, notify_ai: true, public_stats: false, marketing: false });
-    await this.db().collection('notifications').add({ userId: u.uid, type: 'welcome', title: `أهلًا بك في PES AI PRO <span class="svg-icon">${I.party}</span>`, body: 'تم إنشاء حسابك بنجاح. ابدأ ببناء تشكيلتك أو حلّل فريقك.', link: '#/builder', is_read: false, created_at: nowStr() });
-    await this.db().doc('users/' + u.uid).update({ last_login_at: nowStr() });
-    this._reg = null;
-    return { user: await this.publicUser(profile), plan: await this.planInfo(profile) };
+    try {
+      const existing = await withTimeout(this.doc('users/' + u.uid), 8000);
+      if (existing) {
+        await this.auth().signOut();
+        this._reg = null;
+        return { error: 'هذا الرقم مسجّل بالفعل — استخدم تبويب «تسجيل الدخول».' };
+      }
+      const pin = d.pin ? await this.makePin(d.pin) : {};
+      const profile = { id: u.uid, name: d.name, phone: d.phone, email: d.email, pin_hash: pin.pin_hash || null, pin_salt: pin.pin_salt || null, status: 'active', plan: 'free', plan_expires_at: null, ai_usage_count: 0, created_at: nowStr(), last_login_at: nowStr() };
+      await this._set('users/' + u.uid, profile);
+      await this._set('userSettings/' + u.uid, { notify_orders: true, notify_subscription: true, notify_platform: true, notify_ai: true, public_stats: false, marketing: false }).catch(() => { });
+      await this._push('notifications', { userId: u.uid, type: 'welcome', title: `أهلًا بك في PES AI PRO <span class="svg-icon">${I.party}</span>`, body: 'تم إنشاء حسابك بنجاح. ابدأ ببناء تشكيلتك أو حلّل فريقك.', link: '#/builder', is_read: false, created_at: nowStr() }).catch(() => { });
+      this._reg = null;
+      return { user: await this.publicUser(profile), plan: await this.planInfo(profile) };
+    } catch (err) {
+      return { error: fbErrMsg(err) };
+    }
   }
   async startLogin(data) {
-    const verifier = this.recaptcha();
-    const confirmation = await this.auth().signInWithPhoneNumber(data.phone, verifier);
-    this._login = { confirmation, name: data.name, phone: data.phone, pin: data.pin };
+    const r = await this._phoneStart(data.phone);
+    if (r.error) return { error: r.error };
+    this._login = { confirmation: r.confirmation, name: data.name, phone: data.phone, pin: data.pin };
     return { requires_otp: true, delivery: { delivered: true, channel: 'sms' }, message: 'أدخل رمز التحقق المرسل إلى هاتفك' };
   }
   async confirmLogin(code) {
-    if (!this._login) return { error: 'انتهت الجلسة، أعد المحاولة' };
-    const cred = await this._login.confirmation.confirm(code);
-    const u = cred.user, p = await this.doc('users/' + u.uid);
-    if (!p) { await this.auth().signOut(); return { error: 'لا يوجد ملف شخصي لهذا الرقم. أنشئ حسابًا جديدًا.' }; }
-    if (p.status === 'suspended') { await this.auth().signOut(); return { error: 'الحساب موقوف. تواصل مع الدعم.' }; }
-    if (String(p.name).trim().toLowerCase() !== String(this._login.name).trim().toLowerCase()) { await this.auth().signOut(); return { error: 'الاسم لا يطابق بيانات الحساب' }; }
-    if (p.pin_hash) {
-      if (!this._login.pin) { this._login.uid = u.uid; this._login.profile = p; return { requires_pin: true, name: p.name }; }
-      if (!(await this.verifyPin(this._login.pin, p.pin_hash, p.pin_salt))) { await this.auth().signOut(); return { error: 'الرمز السري غير صحيح' }; }
+    if (!this._login) return { error: 'انتهت جلسة التحقق، أعد المحاولة من البداية' };
+    let cred;
+    try { cred = await withTimeout(this._login.confirmation.confirm(code), 30000); }
+    catch (err) { return { error: fbErrMsg(err) }; }
+    try {
+      const u = cred.user, p = await withTimeout(this.doc('users/' + u.uid), 8000);
+      if (!p) { await this.auth().signOut(); return { error: 'لا يوجد ملف شخصي لهذا الرقم. أنشئ حسابًا جديدًا.' }; }
+      if (p.status === 'suspended') { await this.auth().signOut(); return { error: 'الحساب موقوف. تواصل مع الدعم.' }; }
+      /* الرقم موثّق بـ OTP بالفعل: اختلاف كتابة الاسم لا يجب أن يمنع الدخول */
+      if (p.pin_hash) {
+        if (!this._login.pin) { this._login.uid = u.uid; this._login.profile = p; return { requires_pin: true, name: p.name }; }
+        if (!(await this.verifyPin(this._login.pin, p.pin_hash, p.pin_salt))) { await this.auth().signOut(); return { error: 'الرمز السري غير صحيح' }; }
+      }
+      await this._update('users/' + u.uid, { last_login_at: nowStr() }).catch(() => { });
+      this._login = null;
+      return { user: await this.publicUser(p), plan: await this.planInfo(p) };
+    } catch (err) {
+      return { error: fbErrMsg(err) };
     }
-    await this.db().doc('users/' + u.uid).update({ last_login_at: nowStr() });
-    this._login = null;
-    return { user: await this.publicUser(p), plan: await this.planInfo(p) };
   }
   async verifyLoginPin(pin) {
-    if (!this._login) return { error: 'انتهت الجلسة' };
+    if (!this._login || !this._login.profile) return { error: 'انتهت الجلسة، أعد المحاولة' };
     const p = this._login.profile;
+    if (!/^\d{4}$/.test(String(pin || ''))) return { error: 'الرمز السري 4 أرقام' };
     if (!(await this.verifyPin(pin, p.pin_hash, p.pin_salt))) { await this.auth().signOut(); return { error: 'الرمز السري غير صحيح' }; }
-    await this.db().doc('users/' + this._login.uid).update({ last_login_at: nowStr() });
+    try { await this._update('users/' + this._login.uid, { last_login_at: nowStr() }); } catch (e) { }
     const res = { user: await this.publicUser(p), plan: await this.planInfo(p) };
     this._login = null; return res;
   }
-  async logout() { await this.auth().signOut(); }
+  async logout() { if (this.auth()) await this.auth().signOut(); }
   async loginWithGoogle() {
     try {
+      if (!SDK_OK) return { error: 'خدمات Firebase لم تُحمَّل. تحقق من الاتصال ثم حدّث الصفحة.' };
+      try { await this.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL); } catch (e) { }
       const provider = new firebase.auth.GoogleAuthProvider();
-      const cred = await this.auth().signInWithPopup(provider);
+      const cred = await withTimeout(this.auth().signInWithPopup(provider), 90000);
       const u = cred.user;
-      const ref = this.db().doc('users/' + u.uid);
       let p = null;
       try {
-        const snap = await Promise.race([ref.get(), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000))]);
-        if (!snap.exists) {
+        const existing = await withTimeout(this._once('users/' + u.uid), 4000).catch(() => null);
+        if (!existing) {
           p = { id: u.uid, name: u.displayName || 'مستخدم Google', phone: u.phoneNumber || '', email: u.email || '', pin_hash: null, pin_salt: null, status: 'active', plan: 'free', plan_expires_at: null, ai_usage_count: 0, created_at: nowStr(), last_login_at: nowStr() };
-          await ref.set(p).catch(() => {});
-          await this.db().doc('userSettings/' + u.uid).set({ notify_orders: true, notify_subscription: true, notify_platform: true, notify_ai: true, public_stats: false, marketing: false }).catch(() => {});
-          await this.db().collection('notifications').add({ userId: u.uid, type: 'welcome', title: `أهلًا بك في PES AI PRO <span class="svg-icon">${I.party}</span>`, body: 'تم إنشاء حسابك عبر Google بنجاح. ابدأ ببناء تشكيلتك أو حلّل فريقك.', link: '#/builder', is_read: false, created_at: nowStr() }).catch(() => {});
+          await this._set('users/' + u.uid, p).catch(() => { });
+          await this._set('userSettings/' + u.uid, { notify_orders: true, notify_subscription: true, notify_platform: true, notify_ai: true, public_stats: false, marketing: false }).catch(() => { });
+          await this._push('notifications', { userId: u.uid, type: 'welcome', title: `أهلًا بك في PES AI PRO <span class="svg-icon">${I.party}</span>`, body: 'تم إنشاء حسابك عبر Google بنجاح. ابدأ ببناء تشكيلتك أو حلّل فريقك.', link: '#/builder', is_read: false, created_at: nowStr() }).catch(() => { });
         } else {
-          p = snap.data();
-          await ref.update({ last_login_at: nowStr() }).catch(() => {});
+          p = existing;
+          await this._update('users/' + u.uid, { last_login_at: nowStr() }).catch(() => { });
         }
       } catch (e) {
         p = { id: u.uid, name: u.displayName || 'مستخدم Google', phone: u.phoneNumber || '', email: u.email || '', status: 'active', plan: 'free', created_at: nowStr(), last_login_at: nowStr() };
@@ -370,12 +567,12 @@ class FirebaseBackend {
       localStorage.setItem('pesai_user', JSON.stringify(pub));
       return res;
     } catch (err) {
-      return { error: err.message || 'فشل تسجيل الدخول بواسطة Google' };
+      return { error: fbErrMsg(err) || 'فشل تسجيل الدخول بواسطة Google' };
     }
   }
   async updateProfile(d) {
     const u = this.user(); if (!u) return { error: 'يجب تسجيل الدخول' };
-    await this.db().doc('users/' + u.uid).update({ name: d.name, email: d.email, phone: d.phone });
+    await this._update('users/' + u.uid, { name: d.name, email: d.email, phone: d.phone });
     return { user: await this.publicUser(await this.profile()), plan: await this.planInfo(await this.profile()) };
   }
   async setPin(d) {
@@ -383,20 +580,19 @@ class FirebaseBackend {
     const p = await this.profile();
     if (p.pin_hash && !(await this.verifyPin(d.current, p.pin_hash, p.pin_salt))) return { error: 'الرمز الحالي غير صحيح' };
     const pin = await this.makePin(d.pin);
-    await this.db().doc('users/' + u.uid).update({ pin_hash: pin.pin_hash, pin_salt: pin.pin_salt });
+    await this._update('users/' + u.uid, { pin_hash: pin.pin_hash, pin_salt: pin.pin_salt });
     return { message: 'تم حفظ الرمز السري' };
   }
   async removePin(d) {
     const u = this.user(); if (!u) return { error: 'يجب تسجيل الدخول' };
     const p = await this.profile();
     if (p.pin_hash && !(await this.verifyPin(d.current, p.pin_hash, p.pin_salt))) return { error: 'الرمز الحالي غير صحيح' };
-    await this.db().doc('users/' + u.uid).update({ pin_hash: null, pin_salt: null });
+    await this._update('users/' + u.uid, { pin_hash: null, pin_salt: null });
     return { message: 'تمت إزالة الرمز' };
   }
   async getPlans() {
     try {
-      const s = await this.db().collection('plans').where('isActive', '==', true).get();
-      const plans = s.docs.map(d => ({ id: d.id, ...d.data() }));
+      const plans = await this.list('plans', 'isActive', true);
       return plans.length ? plans.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)) : SEED_PLANS;
     } catch (e) {
       return SEED_PLANS;
@@ -404,8 +600,7 @@ class FirebaseBackend {
   }
   async getProducts() {
     try {
-      const s = await this.db().collection('products').where('isActive', '==', true).get();
-      const prods = s.docs.map(d => ({ id: d.id, ...d.data() }));
+      const prods = await this.list('products', 'isActive', true);
       return prods.length ? prods.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)) : SEED_PRODUCTS;
     } catch (e) {
       return SEED_PRODUCTS;
@@ -413,7 +608,11 @@ class FirebaseBackend {
   }
   async getFormations() { return { formations: FORMATIONS }; }
   async getPlayers(q) { return { players: PLAYERS.filter(p => !q || p.name.toLowerCase().includes(q.toLowerCase()) || p.position.includes(q.toUpperCase())) }; }
-  async getTeams() { const u = this.user(); if (!u) return { teams: [] }; const s = await this.db().collection('teams').where('userId', '==', u.uid).get(); return { teams: s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || ''))) }; }
+  async getTeams() {
+    const u = this.user(); if (!u) return { teams: [] };
+    const teams = await this.list('teams', 'userId', u.uid);
+    return { teams: teams.map(t => ({ ...t, players: toArr(t.players) })).sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || ''))) };
+  }
   async saveTeam(t) {
     const u = this.user(); if (!u) return { error: 'يجب تسجيل الدخول' };
     const f = FORMATIONS.find(x => x.name === t.formation) || FORMATIONS[0];
@@ -421,22 +620,22 @@ class FirebaseBackend {
     if (!players.some(p => p && p.name)) return { error: 'أضف لاعبًا واحدًا على الأقل' };
     const a = analyzeLineup(f, players);
     const data = { userId: u.uid, name: t.name || 'تشكيلتي', formation: t.formation, style: t.style || '', players, rating: a.overall, chemistry: a.chemistry, updated_at: nowStr() };
-    if (t.id) { await this.db().doc('teams/' + t.id).update(data); return { id: t.id, analysis: a, message: 'تم تحديث التشكيلة' }; }
-    const r = await this.db().collection('teams').add({ ...data, created_at: nowStr() });
-    return { id: r.id, analysis: a, message: 'تم حفظ التشكيلة' };
+    if (t.id) { await this._update('teams/' + t.id, data); return { id: t.id, analysis: a, message: 'تم تحديث التشكيلة' }; }
+    const key = await this._push('teams', { ...data, created_at: nowStr() });
+    return { id: key, analysis: a, message: 'تم حفظ التشكيلة' };
   }
-  async deleteTeam(id) { await this.db().doc('teams/' + id).delete(); return { message: 'تم الحذف' }; }
+  async deleteTeam(id) { await this._remove('teams/' + id); return { message: 'تم الحذف' }; }
   async compareTeams(a, b) {
     const [ta, tb] = await Promise.all([this.doc('teams/' + a), this.doc('teams/' + b)]);
     if (!ta || !tb) return { error: 'التشكيلة غير موجودة' };
+    ta.players = toArr(ta.players); tb.players = toArr(tb.players);
     const fa = FORMATIONS.find(x => x.name === ta.formation) || FORMATIONS[0], fb2 = FORMATIONS.find(x => x.name === tb.formation) || FORMATIONS[0];
     return { comparison: compareTeams({ formationData: fa, players: ta.players }, { formationData: fb2, players: tb.players }), a: ta, b: tb };
   }
   async suggestTeam(formation) { const f = FORMATIONS.find(x => x.name === formation) || FORMATIONS[0]; const players = bestXI(PLAYERS, f); return { formation: f.name, players, analysis: analyzeLineup(f, players) }; }
   async getMatches() {
     const u = this.user(); if (!u) return { matches: [], stats: { played: 0, wins: 0, draws: 0, losses: 0, goals_for: 0, goals_against: 0 } };
-    const s = await this.db().collection('matches').where('userId', '==', u.uid).get();
-    const matches = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => String(b.match_date || '').localeCompare(String(a.match_date || '')));
+    const matches = (await this.list('matches', 'userId', u.uid)).sort((a, b) => String(b.match_date || '').localeCompare(String(a.match_date || '')));
     return { matches, stats: this.matchStats(matches) };
   }
   matchStats(matches) {
@@ -445,24 +644,24 @@ class FirebaseBackend {
   }
   async saveMatch(m) {
     const u = this.user(); if (!u) return { error: 'يجب تسجيل الدخول' };
-    const r = await this.db().collection('matches').add({ userId: u.uid, opponent: m.opponent, goals_for: m.goals_for, goals_against: m.goals_against, competition: m.competition || '', match_date: m.match_date || todayStr(), notes: m.notes || '', image_url: m.image_url || '', created_at: nowStr() });
-    return { id: r.id, message: 'تم حفظ المباراة' };
+    const key = await this._push('matches', { userId: u.uid, opponent: m.opponent, goals_for: m.goals_for, goals_against: m.goals_against, competition: m.competition || '', match_date: m.match_date || todayStr(), notes: m.notes || '', image_url: m.image_url || '', created_at: nowStr() });
+    return { id: key, message: 'تم حفظ المباراة' };
   }
-  async deleteMatch(id) { await this.db().doc('matches/' + id).delete(); return { message: 'تم الحذف' }; }
+  async deleteMatch(id) { await this._remove('matches/' + id); return { message: 'تم الحذف' }; }
   async analyzeMatches() {
     const { matches } = await this.getMatches();
     if (!matches.length) return { error: 'سجّل مباراة واحدة على الأقل أولًا' };
     const s = this.matchStats(matches), wins = s.wins, draws = s.draws, losses = s.losses, gf = s.goals_for, ga = s.goals_against;
     const report = { record: { played: s.played, wins, draws, losses }, goals: { scored: gf, conceded: ga, avg_scored: +(gf / s.played).toFixed(2), avg_conceded: +(ga / s.played).toFixed(2) }, win_rate: Math.round(wins / s.played * 100), weaknesses: [ga > gf ? 'خط الدفاع يستقبل أهدافًا أكثر مما يسجل الفريق.' : 'الدفاع في مستوى جيد.', losses > wins ? 'الخسائر أكثر من الانتصارات؛ جرّب خطة أكثر توازنًا.' : 'سجل النتائج إيجابي.', matches.length < 5 ? 'سجل المباريات صغير — سجّل المزيد لدقة أعلى.' : 'سجل المباريات كافٍ لتحليل موثوق.'], suggestions: ['سجّل كل مباراة فور انتهائها.', 'حسّن التشكيلة بناءً على تحليل الفريق.', 'حدد هدفًا أسبوعيًا لتقليل الأهداف المستقبلة.'], team: null, engine: 'local-rules' };
     const u = this.user();
-    await this.db().collection('reports').add({ userId: u.uid, kind: 'match', title: 'تحليل سجل المباريات', input_summary: JSON.stringify({ matches: matches.length }), result: report, confidence: 80, engine: 'local-rules', created_at: nowStr() });
+    await this._push('reports', { userId: u.uid, kind: 'match', title: 'تحليل سجل المباريات', input_summary: JSON.stringify({ matches: matches.length }), result: report, confidence: 80, engine: 'local-rules', created_at: nowStr() });
     return { report };
   }
   async usageToday() {
     const u = this.user(); if (!u) return 0;
-    const s = await this.db().collection('reports').where('userId', '==', u.uid).get();
+    const reports = await this.list('reports', 'userId', u.uid);
     const today = todayStr();
-    return s.docs.filter(d => String(d.data().created_at || '').slice(0, 10) === today).length;
+    return reports.filter(d => String(d.created_at || '').slice(0, 10) === today).length;
   }
   async analyzeTeam(formation, players) {
     const u = this.user(); if (!u) return { error: 'يجب تسجيل الدخول' };
@@ -471,8 +670,8 @@ class FirebaseBackend {
     if (!pro && used >= 5) return { error: 'وصلت للحد المجاني (5 تحليلات يوميًا). قم بالترقية إلى PRO.', upgrade: true };
     const f = FORMATIONS.find(x => x.name === formation) || FORMATIONS[0];
     const a = analyzeLineup(f, players);
-    await this.db().collection('reports').add({ userId: u.uid, kind: 'team', title: 'تحليل تشكيلة ' + f.name, input_summary: JSON.stringify(players.map(x => ({ n: x.name, p: x.position }))), result: a, confidence: a.confidence, engine: 'rules-engine', created_at: nowStr() });
-    await this.db().doc('users/' + u.uid).update({ ai_usage_count: (p.ai_usage_count || 0) + 1 });
+    await this._push('reports', { userId: u.uid, kind: 'team', title: 'تحليل تشكيلة ' + f.name, input_summary: JSON.stringify(players.map(x => ({ n: x.name, p: x.position }))), result: a, confidence: a.confidence, engine: 'rules-engine', created_at: nowStr() });
+    await this._update('users/' + u.uid, { ai_usage_count: (p.ai_usage_count || 0) + 1 });
     return { analysis: a, engine: 'rules-engine', remaining: pro ? null : Math.max(0, 5 - used - 1) };
   }
   async assistant(message) {
@@ -483,19 +682,18 @@ class FirebaseBackend {
     const [teams, { matches, stats }, plans] = await Promise.all([this.getTeams(), this.getMatches(), this.getPlans()]);
     const team = teams.teams[0]; const f = team ? (FORMATIONS.find(x => x.name === team.formation) || FORMATIONS[0]) : null;
     const reply = localAssistant(message, { user: p, plans, team, formationData: f, players: team?.players || [], record: stats, isPro: pro });
-    await this.db().collection('reports').add({ userId: u.uid, kind: 'assistant', title: 'محادثة المساعد', input_summary: message, result: reply, confidence: 60, engine: 'local-rules', created_at: nowStr() });
+    await this._push('reports', { userId: u.uid, kind: 'assistant', title: 'محادثة المساعد', input_summary: message, result: reply, confidence: 60, engine: 'local-rules', created_at: nowStr() });
     return { reply, remaining: pro ? null : Math.max(0, 3 - used - 1) };
   }
   async createOrder(d) {
     const u = this.user(); if (!u) return { error: 'يجب تسجيل الدخول' };
-    const r = await this.db().collection('orders').add({ userId: u.uid, type: d.type || 'product', product_id: d.product_id || null, plan_id: d.plan_id || null, quantity: d.quantity || 1, total: d.total, status: 'pending_review', payment_method: d.payment_method || 'manual', payment_reference: d.payment_reference || '', admin_note: '', created_at: nowStr(), updated_at: nowStr() });
-    await this.db().collection('notifications').add({ userId: u.uid, type: 'order', title: 'تم استلام طلبك', body: 'طلب #' + r.id + ' قيد مراجعة الدفع.', link: '#/account', is_read: false, created_at: nowStr() });
-    return { order_id: r.id, message: 'تم إنشاء الطلب بنجاح' };
+    const key = await this._push('orders', { userId: u.uid, type: d.type || 'product', product_id: d.product_id || null, plan_id: d.plan_id || null, quantity: d.quantity || 1, total: d.total, status: 'pending_review', payment_method: d.payment_method || 'manual', payment_reference: d.payment_reference || '', admin_note: '', created_at: nowStr(), updated_at: nowStr() });
+    await this._push('notifications', { userId: u.uid, type: 'order', title: 'تم استلام طلبك', body: 'طلب #' + key + ' قيد مراجعة الدفع.', link: '#/account', is_read: false, created_at: nowStr() }).catch(() => { });
+    return { order_id: key, message: 'تم إنشاء الطلب بنجاح' };
   }
   async getOrders() {
     const u = this.user(); if (!u) return { orders: [] };
-    const s = await this.db().collection('orders').where('userId', '==', u.uid).get();
-    const orders = s.docs.map(d => ({ id: d.id, ...d.data() }));
+    const orders = await this.list('orders', 'userId', u.uid);
     const prods = await this.getProducts(), plans = await this.getPlans();
     orders.forEach(o => { o.product_name = prods.find(p => p.id === o.product_id)?.name; o.plan_name = plans.find(p => p.id === o.plan_id)?.name; });
     return { orders: orders.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))) };
@@ -505,141 +703,94 @@ class FirebaseBackend {
     const plans = await this.getPlans(); const plan = plans.find(p => p.id === d.plan_id);
     if (!plan) return { error: 'الباقة غير متاحة' };
     if (plan.code === 'free') return { error: 'الباقة المجانية مفعّلة تلقائيًا' };
-    const r = await this.db().collection('orders').add({ userId: u.uid, type: 'subscription', plan_id: plan.id, quantity: 1, total: plan.price, status: 'pending_review', payment_method: d.payment_method || 'manual', payment_reference: d.reference || '', admin_note: '', created_at: nowStr(), updated_at: nowStr() });
-    await this.db().collection('notifications').add({ userId: u.uid, type: 'order', title: 'طلب اشتراك قيد المراجعة', body: 'طلب #' + r.id + ' — ' + plan.name + '. سيتم التفعيل بعد تأكيد الدفع.', link: '#/account', is_read: false, created_at: nowStr() });
-    return { order_id: r.id, message: 'تم إرسال الطلب. الاشتراك لا يُفعّل قبل تأكيد الدفع.' };
+    const key = await this._push('orders', { userId: u.uid, type: 'subscription', plan_id: plan.id, quantity: 1, total: plan.price, status: 'pending_review', payment_method: d.payment_method || 'manual', payment_reference: d.reference || '', admin_note: '', created_at: nowStr(), updated_at: nowStr() });
+    await this._push('notifications', { userId: u.uid, type: 'order', title: 'طلب اشتراك قيد المراجعة', body: 'طلب #' + key + ' — ' + plan.name + '. سيتم التفعيل بعد تأكيد الدفع.', link: '#/account', is_read: false, created_at: nowStr() }).catch(() => { });
+    return { order_id: key, message: 'تم إرسال الطلب. الاشتراك لا يُفعّل قبل تأكيد الدفع.' };
   }
   async getNotifications() {
     const u = this.user(); if (!u) return { notifications: [], unread: 0 };
-    const s = await this.db().collection('notifications').where('userId', '==', u.uid).get();
-    const notifications = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+    const notifications = (await this.list('notifications', 'userId', u.uid)).sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
     return { notifications, unread: notifications.filter(n => !n.is_read).length };
   }
-  async markNotification(id) { await this.db().doc('notifications/' + id).update({ is_read: true }); return { message: 'تم' }; }
-  async markAllNotifications() { const u = this.user(); const s = await this.db().collection('notifications').where('userId', '==', u.uid).where('is_read', '==', false).get(); const b = this.db().batch(); s.docs.forEach(d => b.update(d.ref, { is_read: true })); await b.commit(); return { message: 'تم' }; }
+  async markNotification(id) { await this._update('notifications/' + id, { is_read: true }); return { message: 'تم' }; }
+  async markAllNotifications() {
+    const u = this.user(); if (!u) return { message: 'تم' };
+    const items = await this.list('notifications', 'userId', u.uid);
+    /* التحديث بيتم على مسار الإشعار نفسه (مش على الحقل الفرعي) عشان قواعد الأمان تقدر تقرأ userId */
+    await Promise.all(items.filter(n => !n.is_read)
+      .map(n => this._update('notifications/' + n.id, { is_read: true }).catch(() => { })));
+    return { message: 'تم' };
+  }
   async uploadImage(file) {
     const u = this.user(); if (!u) return { error: 'يجب تسجيل الدخول' };
-    const path = `uploads/${u.uid}/${Date.now()}-${file.name}`;
-    const s = await fb.storage().ref(path).put(file);
-    return { url: await s.ref.getDownloadURL() };
+    if (file && file.size > 4 * 1024 * 1024) return { error: 'حجم الصورة أكبر من 4MB — اضغطها أولًا.' };
+    try {
+      const path = `uploads/${u.uid}/${Date.now()}-${file.name}`;
+      const storage = await storageService();
+      const s = await withTimeout(storage.ref(path).put(file), 45000);
+      return { url: await s.ref.getDownloadURL() };
+    } catch (err) {
+      return { error: fbErrMsg(err) };
+    }
   }
   async analyzeImage() { return { needs_key: true, error: 'تحليل الصور بالذكاء الاصطناعي يحتاج دالة خادم (Firebase Function) مع مفتاح AI. يمكنك إدخال التشكيلة يدويًا والحصول على التحليل الكامل.' }; }
-  async getReports() { const u = this.user(); if (!u) return { reports: [] }; const s = await this.db().collection('reports').where('userId', '==', u.uid).get(); return { reports: s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))).slice(0, 40) }; }
-  async updateSettings(d) { const u = this.user(); if (!u) return { error: 'يجب تسجيل الدخول' }; await this.db().doc('userSettings/' + u.uid).set(d, { merge: true }); return { settings: d, message: 'تم حفظ الإعدادات' }; }
+  async getReports() { const u = this.user(); if (!u) return { reports: [] }; const reports = await this.list('reports', 'userId', u.uid); return { reports: reports.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))).slice(0, 40) }; }
+  async updateSettings(d) { const u = this.user(); if (!u) return { error: 'يجب تسجيل الدخول' }; await this._update('userSettings/' + u.uid, d); return { settings: d, message: 'تم حفظ الإعدادات' }; }
   async getSettings() { const u = this.user(); if (!u) return { settings: {} }; const s = await this.doc('userSettings/' + u.uid); return { settings: s || {} }; }
   async deleteAccount(d) {
     const u = this.user(); if (!u) return { error: 'يجب تسجيل الدخول' };
     const p = await this.profile();
     if (p.pin_hash && !(await this.verifyPin(d.pin || '', p.pin_hash, p.pin_salt))) return { error: 'الرمز السري غير صحيح' };
     const uid = u.uid;
-    for (const col of ['teams', 'matches', 'orders', 'notifications', 'reports']) { const s = await this.db().collection(col).where('userId', '==', uid).get(); const b = this.db().batch(); s.docs.forEach(d2 => b.delete(d2.ref)); await b.commit(); }
-    await this.db().doc('users/' + uid).delete(); await this.db().doc('userSettings/' + uid).delete();
+    const updates = {};
+    for (const col of ['teams', 'matches', 'orders', 'notifications', 'reports']) {
+      const items = await this.list(col, 'userId', uid);
+      items.forEach(x => { updates[col + '/' + x.id] = null; });
+    }
+    updates['users/' + uid] = null;
+    updates['userSettings/' + uid] = null;
+    await this._multi(updates);
     await u.delete();
     return { message: 'تم حذف الحساب' };
   }
   async recoverRequest(d) {
-    const verifier = this.recaptcha();
-    const confirmation = await this.auth().signInWithPhoneNumber(d.phone, verifier);
-    this._recover = { confirmation, phone: d.phone };
+    const r = await this._phoneStart(d.phone);
+    if (r.error) return { error: r.error };
+    this._recover = { confirmation: r.confirmation, phone: d.phone };
     return { requires_otp: true, delivery: { delivered: true, channel: 'sms' }, message: 'أدخل رمز التحقق' };
   }
   async recoverVerify(d) {
-    if (!this._recover) return { error: 'انتهت الجلسة' };
-    const cred = await this._recover.confirmation.confirm(d.otp);
-    const p = await this.doc('users/' + cred.user.uid);
-    if (!p) { await this.auth().signOut(); return { error: 'لا يوجد حساب بهذا الرقم' }; }
-    if (d.pin) { const pin = await this.makePin(d.pin); await this.db().doc('users/' + cred.user.uid).update({ pin_hash: pin.pin_hash, pin_salt: pin.pin_salt }); }
-    else await this.db().doc('users/' + cred.user.uid).update({ pin_hash: null, pin_salt: null });
-    this._recover = null;
-    return { user: await this.publicUser(p), plan: await this.planInfo(p), message: 'تمت استعادة الحساب' };
-  }
-  /* -------- admin -------- */
-  async adminLogin(email, password) {
-    const cred = await this.auth().signInWithEmailAndPassword(email, password);
-    const a = await this.doc('admins/' + cred.user.uid);
-    if (!a || !a.isAdmin) { await this.auth().signOut(); return { error: 'هذا الحساب لا يملك صلاحية إدارة' }; }
-    this._admin = { uid: cred.user.uid, name: a.name || 'Admin', email: a.email || email };
-    return { requires_code: true, admin: this._admin, message: 'أدخل رمز الدخول الإداري' };
-  }
-  async adminVerify(code) {
-    if (!this._admin) return { error: 'انتهت الجلسة' };
-    const s = await this.doc('settings/adminAccessCode');
-    const stored = s?.hash || '';
-    if (!stored) { sessionStorage.setItem('pesai_admin', this._admin.uid); return { admin: this._admin, setup: true, message: 'تم الدخول — عيّن رمز الدخول الإداري من الإعدادات' }; }
-    const hash = await this.hashPin(code, s?.salt || 'pesai-admin');
-    if (hash !== stored) return { error: 'رمز الدخول الإداري غير صحيح' };
-    sessionStorage.setItem('pesai_admin', this._admin.uid);
-    return { admin: this._admin, message: 'تم دخول لوحة التحكم' };
-  }
-  async adminMe() { const u = this.user(); if (!u) return { admin: null }; const a = await this.doc('admins/' + u.uid); if (!a || !a.isAdmin) return { admin: null }; return { admin: { id: u.uid, name: a.name, email: a.email, role: a.role || 'superadmin' } }; }
-  async requireAdmin() { const me = await this.adminMe(); if (!me.admin) throw new Error('دخول الإدارة مطلوب'); return me.admin; }
-  async adminStats() {
-    await this.requireAdmin();
-    const [users, orders, products, plans, reports, teams, matches] = await Promise.all([this.docs('users'), this.docs('orders'), this.docs('products'), this.docs('plans'), this.docs('reports'), this.docs('teams'), this.docs('matches')]);
-    const now = new Date();
-    return { stats: { users: users.length, activeUsers: users.filter(u => u.status === 'active').length, proUsers: users.filter(u => u.plan === 'pro' && u.plan_expires_at && new Date(u.plan_expires_at.replace(' ', 'T')) > now).length, newUsers: users.filter(u => String(u.created_at || '').slice(0, 10) >= new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)).length, orders: orders.length, pending: orders.filter(o => o.status === 'pending_review').length, revenue: orders.filter(o => o.status === 'completed').reduce((a, o) => a + (o.total || 0), 0), products: products.filter(p => p.isActive !== false).length, reports: reports.length, teams: teams.length, matches: matches.length }, recentUsers: users.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))).slice(0, 6), recentOrders: orders.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))).slice(0, 6).map(o => ({ ...o, user_name: users.find(u => u.id === o.userId)?.name })), byEngine: [...new Set(reports.map(r => r.engine))].map(e => ({ engine: e, c: reports.filter(r => r.engine === e).length })), daily: [] };
-  }
-  async adminUsers() { await this.requireAdmin(); const [users, teams, orders] = await Promise.all([this.docs('users'), this.docs('teams'), this.docs('orders')]); return { users: users.map(u => ({ ...u, plan_expires_at: u.plan_expires_at, teams_count: teams.filter(t => t.userId === u.id).length, orders_count: orders.filter(o => o.userId === u.id).length })).sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))) }; }
-  async adminUserUpdate(id, d) {
-    await this.requireAdmin();
-    if (d.status) await this.db().doc('users/' + id).update({ status: d.status });
-    if (d.plan) {
-      if (d.plan === 'pro') { const base = new Date(); await this.db().doc('users/' + id).update({ plan: 'pro', plan_expires_at: addDays(d.extend_days || 30) }); await this.db().collection('notifications').add({ userId: id, type: 'subscription', title: 'تم تفعيل باقة PRO', body: 'أصبح لديك وصول كامل.', link: '#/subscriptions', is_read: false, created_at: nowStr() }); }
-      else await this.db().doc('users/' + id).update({ plan: 'free', plan_expires_at: null });
+    if (!this._recover) return { error: 'انتهت جلسة التحقق، أعد المحاولة من البداية' };
+    let cred;
+    try { cred = await withTimeout(this._recover.confirmation.confirm(d.otp), 30000); }
+    catch (err) { return { error: fbErrMsg(err) }; }
+    try {
+      const p = await withTimeout(this.doc('users/' + cred.user.uid), 8000);
+      if (!p) { await this.auth().signOut(); return { error: 'لا يوجد حساب بهذا الرقم' }; }
+      if (d.pin) { const pin = await this.makePin(d.pin); await this._update('users/' + cred.user.uid, { pin_hash: pin.pin_hash, pin_salt: pin.pin_salt }); }
+      else await this._update('users/' + cred.user.uid, { pin_hash: null, pin_salt: null });
+      this._recover = null;
+      return { user: await this.publicUser(p), plan: await this.planInfo(p), message: 'تمت استعادة الحساب' };
+    } catch (err) {
+      return { error: fbErrMsg(err) };
     }
-    return { message: 'تم التحديث' };
   }
-  async adminPlans() { await this.requireAdmin(); return { plans: await this.docs('plans') }; }
-  async adminPlanSave(id, d) { await this.requireAdmin(); if (id) await this.db().doc('plans/' + id).set(d, { merge: true }); else await this.db().collection('plans').add(d); return { message: 'تم الحفظ' }; }
-  async adminPlanDelete(id) { await this.requireAdmin(); await this.db().doc('plans/' + id).update({ isActive: false }); return { message: 'تم الإيقاف' }; }
-  async adminProducts() { await this.requireAdmin(); return { products: await this.docs('products') }; }
-  async adminProductSave(id, d) { await this.requireAdmin(); if (id) await this.db().doc('products/' + id).set(d, { merge: true }); else await this.db().collection('products').add(d); return { message: 'تم الحفظ' }; }
-  async adminProductDelete(id) { await this.requireAdmin(); await this.db().doc('products/' + id).update({ isActive: false }); return { message: 'تم الإخفاء' }; }
-  async adminOrders() { await this.requireAdmin(); const [orders, users, products, plans] = await Promise.all([this.docs('orders'), this.docs('users'), this.docs('products'), this.docs('plans')]); return { orders: orders.map(o => ({ ...o, user_name: users.find(u => u.id === o.userId)?.name, user_phone: users.find(u => u.id === o.userId)?.phone, product_name: products.find(p => p.id === o.product_id)?.name, plan_name: plans.find(p => p.id === o.plan_id)?.name })).sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))) }; }
-  async adminOrderAction(id, action, note) {
-    await this.requireAdmin();
-    const o = await this.doc('orders/' + id); if (!o) return { error: 'الطلب غير موجود' };
-    const status = action === 'approve' ? 'completed' : 'rejected';
-    await this.db().doc('orders/' + id).update({ status, admin_note: note || '', updated_at: nowStr() });
-    if (action === 'approve' && o.type === 'subscription' && o.plan_id) {
-      const plan = await this.doc('plans/' + o.plan_id);
-      if (plan) { await this.db().doc('users/' + o.userId).update({ plan: 'pro', plan_expires_at: addDays(plan.durationDays || 30) }); await this.db().collection('notifications').add({ userId: o.userId, type: 'subscription', title: `تم تفعيل اشتراك PRO <span class="svg-icon">${I.party}</span>`, body: 'تم تأكيد الدفع للطلب #' + id, link: '#/subscriptions', is_read: false, created_at: nowStr() }); }
-    } else {
-      await this.db().collection('notifications').add({ userId: o.userId, type: 'order', title: action === 'approve' ? 'تم تأكيد طلبك' : 'تم رفض الطلب', body: 'الطلب #' + id + (note ? ' — ' + note : ''), link: '#/account', is_read: false, created_at: nowStr() });
-    }
-    return { message: 'تم التحديث' };
-  }
-  async adminBroadcast(d) {
-    await this.requireAdmin();
-    const users = d.audience === 'all' ? await this.docs('users') : (await this.docs('users')).filter(u => d.audience === 'pro' ? u.plan === 'pro' : u.plan === 'free');
-    const b = this.db().batch();
-    users.forEach(u => { const r = this.db().collection('notifications').doc(); b.set(r, { userId: u.id, type: 'admin', title: d.title, body: d.body || '', link: d.link || '', is_read: false, created_at: nowStr() }); });
-    await b.commit();
-    return { sent: users.length, message: 'تم الإرسال إلى ' + users.length };
-  }
-  async adminSettings() { await this.requireAdmin(); const s = await this.settings(); return { settings: this.normSettings(s), ai: { enabled: !!s.aiEnabled, model: s.aiModel || 'gpt-4o-mini', key_env: 'FIREBASE_CONFIG' } }; }
-  async adminSettingsSave(d) {
-    await this.requireAdmin();
-    const payload = { platformName: d.platform_name, tagline: d.tagline, whatsappNumber: d.whatsapp_number, telegramUrl: d.telegram_url, supportEmail: d.support_email, announcement: d.announcement, paymentsNote: d.payments_note, instapayHandle: d.instapay_handle, vodafoneCash: d.vodafone_cash, aiModel: d.ai_model };
-    await this.db().doc('settings/public').set(payload, { merge: true });
-    if (d.admin_access_code) { const salt = uid(); const hash = await this.hashPin(d.admin_access_code, salt); await this.db().doc('settings/adminAccessCode').set({ hash, salt }); }
-    return { message: 'تم حفظ الإعدادات' };
-  }
-  async adminAudit() { await this.requireAdmin(); const s = await this.docs('audit'); return { logs: s.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))).slice(0, 150) }; }
-  async adminAi() { await this.requireAdmin(); const reports = await this.docs('reports'); const users = await this.docs('users'); return { total: reports.length, byKind: [...new Set(reports.map(r => r.kind))].map(k => ({ kind: k, c: reports.filter(r => r.kind === k).length })), byEngine: [...new Set(reports.map(r => r.engine))].map(e => ({ engine: e, c: reports.filter(r => r.engine === e).length })), daily: [], topUsers: users.map(u => ({ id: u.id, name: u.name, plan: u.plan, c: reports.filter(r => r.userId === u.id).length })).sort((a, b) => b.c - a.c).slice(0, 10) }; }
 }
 let Backend = new FirebaseBackend();
 function withTimeout(p, ms) { try { p.catch(() => {}); } catch (e) { } return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('TIMEOUT')), ms))]); }
 /* ------------------------------- state + routing ------------------------------- */
-const state = { user: null, plan: null, settings: {}, plans: [], products: [], formations: FORMATIONS, players: PLAYERS, teams: [], matches: [], orders: [], notifications: [], cart: JSON.parse(localStorage.getItem('pesai_cart') || '[]'), admin: null, route: 'home', params: {}, booted: false };
+const state = { user: null, plan: null, settings: {}, plans: [], products: [], formations: FORMATIONS, players: PLAYERS, teams: [], matches: [], orders: [], notifications: [], cart: JSON.parse(localStorage.getItem('pesai_cart') || '[]'), route: 'home', params: {}, booted: false, authReady: false };
 const PROTECTED = ['analyzer', 'builder', 'assistant', 'matches', 'account', 'player'];
 const set = (k, v) => { state[k] = v; };
+let pendingRoute = null;
 function saveCart() { localStorage.setItem('pesai_cart', JSON.stringify(state.cart)); }
 function isPro() { return !!(state.user && state.user.plan === 'pro' && state.plan?.isPro); }
 function navigate(route) { if (location.hash === '#/' + route) { renderRoute(); } else { location.hash = '#/' + route; } }
 function goProtected(route) {
-  if (!state.user) { toast('سجّل الدخول أولًا للوصول إلى هذه الأداة', 'err'); navigate('auth?next=' + route); return; }
-  navigate(route);
+  if (state.user) { navigate(route); return; }
+  if (!state.authReady) { pendingRoute = route; toast('لحظة… جارٍ التحقق من جلستك'); renderRoute(); return; }
+  toast('سجّل الدخول أولًا للوصول إلى هذه الأداة', 'err');
+  navigate('auth?next=' + route);
 }
 function parseHash() {
   const raw = location.hash.replace(/^#\/?/, '') || 'home';
@@ -656,59 +807,140 @@ async function boot() {
   state.formations = FORMATIONS;
   state.players = PLAYERS;
 
-  const cachedUser = localStorage.getItem('pesai_user');
-  if (cachedUser) {
-    try { state.user = JSON.parse(cachedUser); state.plan = state.plans[0]; } catch(e) {}
-  }
+  /* 1) عرض فوري من الكاش المحلي — بدون انتظار أي طلب شبكة */
+  try {
+    const cachedBoot = JSON.parse(localStorage.getItem('pesai_boot') || 'null');
+    if (cachedBoot && (Date.now() - (cachedBoot.at || 0) < 6 * 3600e3)) {
+      if (cachedBoot.settings) state.settings = cachedBoot.settings;
+      if (cachedBoot.plans && cachedBoot.plans.length) state.plans = cachedBoot.plans;
+      if (cachedBoot.products && cachedBoot.products.length) state.products = cachedBoot.products;
+    }
+  } catch (e) { }
+  try {
+    const cachedUser = localStorage.getItem('pesai_user');
+    if (cachedUser) {
+      state.user = JSON.parse(cachedUser);
+      const cachedPlan = localStorage.getItem('pesai_plan');
+      if (cachedPlan) state.plan = JSON.parse(cachedPlan);
+    }
+  } catch (e) { }
 
-  renderShell();
   initSplash();
-  renderRoute();
-
-  const firebaseUser = await new Promise(resolve => {
-    const unsub = firebase.auth().onAuthStateChanged(user => {
-      unsub();
-      resolve(user);
-    }, () => resolve(null));
-    setTimeout(() => resolve(firebase.auth().currentUser), 1500);
-  });
-
-  if (firebaseUser) {
-    try {
-      const p = await Backend.doc('users/' + firebaseUser.uid);
-      if (p) {
-        state.user = await Backend.publicUser(p);
-        state.plan = await Backend.planInfo(p);
-        localStorage.setItem('pesai_user', JSON.stringify(state.user));
-      } else {
-        const newProfile = { id: firebaseUser.uid, name: firebaseUser.displayName || 'مستخدم', phone: firebaseUser.phoneNumber || '', email: firebaseUser.email || '', status: 'active', plan: 'free', created_at: nowStr(), last_login_at: nowStr() };
-        await Backend.db().doc('users/' + firebaseUser.uid).set(newProfile).catch(() => {});
-        state.user = await Backend.publicUser(newProfile);
-        state.plan = await Backend.planInfo(newProfile);
-        localStorage.setItem('pesai_user', JSON.stringify(state.user));
-      }
-    } catch (e) {}
-  } else {
-    state.user = null;
-    state.plan = null;
-    localStorage.removeItem('pesai_user');
-  }
-
   renderShell();
   renderRoute();
 
-  setTimeout(async () => {
+  if (!SDK_OK) {
+    state.authReady = true;
+    toast('تعذر تحميل خدمات Firebase (شبكة/حجب). تحقق من الاتصال ثم حدّث الصفحة', 'err');
+    renderRoute();
+    return;
+  }
+  if (!fb.db) {
+    toast('تعذر الاتصال بـ Realtime Database — راجع databaseURL في إعدادات المشروع', 'err');
+  }
+
+  /* 2) بالتوازي: بيانات المنصة + التحقق من الجلسة (بدل التسلسل البطيء) */
+  refreshPublicData();
+  watchAuth();
+
+  /* 3) صمّام أمان: لا نُبقي المستخدم على شاشة "جارٍ التحقق" أكثر من 9 ثوانٍ */
+  setTimeout(() => {
+    if (!state.authReady) { state.authReady = true; renderShell(); renderRoute(); }
+  }, 9000);
+}
+
+let _publicBusy = false;
+async function refreshPublicData() {
+  if (_publicBusy) return; _publicBusy = true;
+  try {
+    const data = await withTimeout(Backend.bootstrap(), 12000);
+    if (!data) return;
+    if (data.settings) state.settings = data.settings;
+    if (data.plans && data.plans.length) state.plans = data.plans;
+    if (data.products && data.products.length) state.products = data.products;
     try {
-      const data = await Backend.bootstrap();
-      if (data) {
-        state.settings = data.settings || state.settings;
-        state.plans = data.plans || state.plans;
-        state.products = data.products || state.products;
-        renderShell();
-        renderRoute();
+      localStorage.setItem('pesai_boot', JSON.stringify({ at: Date.now(), settings: state.settings, plans: state.plans, products: state.products }));
+    } catch (e) { }
+    renderShell();
+    safeRerenderView();
+  } catch (e) {
+    console.warn('bootstrap skipped:', e && e.message);
+  } finally { _publicBusy = false; }
+}
+
+/* إعادة رسم الصفحة الحالية بأمان — لا تمسح نموذجًا يكتب فيه المستخدم */
+function safeRerenderView() {
+  const el = document.activeElement;
+  if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
+  if (state.route === 'auth') return;
+  renderRoute();
+}
+
+let _authWatchStarted = false;
+function watchAuth() {
+  if (!SDK_OK || !fb.auth || _authWatchStarted) { state.authReady = true; return; }
+  _authWatchStarted = true;
+  let firstCallback = true;
+  fb.auth.onAuthStateChanged(async user => {
+    const prevId = state.user ? state.user.id : null;
+    /* مهم: أول نداء قد يكون null قبل أن يُكمل Firebase استرجاع الجلسة من الجهاز.
+       لا نُسجّل خروج المستخدم فورًا — ننتظر ونعيد التحقق. */
+    if (!user && firstCallback && state.user) {
+      firstCallback = false;
+      state.authReady = true;
+      renderShell();
+      const cur0 = parseHash().route;
+      if (cur0 !== 'auth') renderRoute();
+      setTimeout(() => {
+        if (fb.auth && !fb.auth.currentUser) {
+          state.user = null; state.plan = null; clearSession();
+          renderShell(); renderRoute();
+        }
+      }, 3500);
+      return;
+    }
+    firstCallback = false;
+    try {
+      if (user) {
+        if (!prevId || prevId !== user.uid) {
+          const p = await withTimeout(Backend.doc('users/' + user.uid), 8000).catch(() => null);
+          if (p) {
+            state.user = await Backend.publicUser(p);
+            state.plan = await Backend.planInfo(p);
+            persistSession();
+          } else if (!state.user && !Backend._reg) {
+            /* حساب Firebase بدون ملف شخصي (فشل إنشاء الملف سابقًا) — نُنشئه الآن بدون مسح بيانات موجودة */
+            const fallback = { id: user.uid, name: user.displayName || 'مستخدم', phone: user.phoneNumber || '', email: user.email || '', status: 'active', plan: 'free', created_at: nowStr(), last_login_at: nowStr() };
+            await withTimeout(Backend._update('users/' + user.uid, fallback), 8000).catch(() => { });
+            state.user = await Backend.publicUser(fallback);
+            state.plan = await Backend.planInfo(fallback);
+            persistSession();
+          }
+        } else {
+          /* نفس المستخدم: تحديث الباقة في الخلفية بدون تعطيل الواجهة */
+          Backend.doc('users/' + user.uid)
+            .then(p => p && Backend.planInfo(p).then(pl => { state.plan = pl; persistSession(); }).catch(() => { }))
+            .catch(() => { });
+        }
+      } else {
+        state.user = null; state.plan = null; clearSession();
       }
-    } catch(e) {}
-  }, 100);
+    } catch (e) {
+      console.warn('auth sync failed:', e && e.message);
+      /* لا نمسح الجلسة المحفوظة عند فشل الشبكة المؤقت */
+    } finally {
+      state.authReady = true;
+      renderShell();
+      const cur = parseHash().route;
+      if (cur !== 'auth') renderRoute();
+      else if (state.user) navigate('home');
+      if (state.user && pendingRoute) { const r = pendingRoute; pendingRoute = null; navigate(r); }
+    }
+  }, err => {
+    console.warn('auth listener error:', err && err.message);
+    state.authReady = true;
+    renderRoute();
+  });
 }
 function renderShell() {
   const bg = $('#bg-root');
@@ -720,7 +952,11 @@ function renderShell() {
     <div class="top-actions">
       ${u ? `<button class="icon-btn" id="bellBtn" aria-label="الإشعارات">${I.bell}<span class="badge-dot hidden" id="bellDot">0</span></button><a class="avatar" href="#/account" title="${esc(u.name)}">${esc((u.name || 'U')[0])}</a>` : `<a class="btn btn-gold btn-sm" href="#/auth">دخول / إنشاء حساب</a>`}
     </div></div></div>`;
-  if (u) loadBell();
+  if (u) {
+    loadBell();
+    const bell = $('#bellBtn');
+    if (bell) bell.onclick = () => navigate('account');
+  }
   const an = $('#announcement');
   if (an) an.innerHTML = s.announcement ? `<div class="announce">${I.spark}<span>${esc(s.announcement)}</span></div>` : '';
   const nav = $('#bottom-nav');
@@ -729,41 +965,61 @@ function renderShell() {
     nav.innerHTML = `<div class="bottom-nav"><div class="nav-in">${items.map(([r, label, ic]) => `<a class="nav-item ${state.route === r ? 'active' : ''}" href="#/${r}">${I[ic]}<span>${label}</span></a>`).join('')}</div></div>`;
   }
 }
-async function loadBell() {
-  const r = await Backend.getNotifications();
-  const dot = $('#bellDot');
-  if (dot) { dot.textContent = r.unread || 0; dot.classList.toggle('hidden', !r.unread); }
+let _bellAt = 0, _bellBusy = false;
+async function loadBell(force) {
+  if (!state.user || _bellBusy) return;
+  if (!force && Date.now() - _bellAt < 30000) return;   /* لا نكرر نفس الطلب مع كل رسم */
+  _bellBusy = true;
+  try {
+    const r = await withTimeout(Backend.getNotifications(), 8000);
+    _bellAt = Date.now();
+    const dot = $('#bellDot');
+    if (dot) { dot.textContent = r.unread || 0; dot.classList.toggle('hidden', !r.unread); }
+  } catch (e) { }
+  finally { _bellBusy = false; }
+}
+function renderSessionCheck() {
+  renderShell();
+  const app = $('#app');
+  if (!app) return;
+  app.innerHTML = `<div class="container section"><div class="card center-x" style="padding:34px">
+    <div class="spinner" style="width:30px;height:30px;margin:0 auto"></div>
+    <p class="muted small mt12" style="margin-top:14px">جارٍ التحقق من جلستك…</p></div></div>`;
 }
 function renderRoute() {
   const { route, params } = parseHash();
   state.route = route; state.params = params;
-  if (route === 'admin') { renderAdmin(); return; }
-  if (PROTECTED.includes(route) && !state.user) { location.replace('#/auth?next=' + route); return; }
+  if (PROTECTED.includes(route) && !state.user) {
+    /* لا نطرد المستخدم لشاشة الدخول قبل التأكد من جلسته (كان يحدث عند كل تحديث) */
+    if (!state.authReady) { renderSessionCheck(); return; }
+    location.replace('#/auth?next=' + route); return;
+  }
   if (route === 'auth' && state.user) { location.replace('#/home'); return; }
   const views = { home: renderHome, auth: renderAuth, analyzer: renderAnalyzer, builder: renderBuilder, assistant: renderAssistant, store: renderStore, subscriptions: renderSubscriptions, matches: renderMatches, account: renderAccount, player: renderPlayer };
   const fn = views[route] || renderHome;
   renderShell();
   fn(params);
-  window.scrollTo({ top: 0, behavior: 'instant' });
+  try { window.scrollTo({ top: 0, behavior: 'instant' }); } catch (e) { }
 }
 function initSplash() {
   const s = $('#splash'); if (!s) return;
-  if (state.route !== 'home' || sessionStorage.getItem('pesai_splash') === '1') { s.remove(); return; }
-  const close = () => { sessionStorage.setItem('pesai_splash', '1'); s.classList.add('hide'); setTimeout(() => s.remove(), 700); };
+  if (parseHash().route !== 'home' || sessionStorage.getItem('pesai_splash') === '1') { s.remove(); return; }
+  const close = () => { sessionStorage.setItem('pesai_splash', '1'); s.classList.add('hide'); setTimeout(() => s.remove(), 600); };
   const skip = $('#skipIntro'); if (skip) skip.onclick = close;
-  setTimeout(close, 3000);
+  /* 3 ثوانٍ كانت تحجب المنصة بلا داعٍ — صارت ثانية واحدة */
+  setTimeout(close, 1000);
 }
 function socialsHtml() {
   const s = state.settings, wa = String(s.whatsappNumber || '').replace(/[^\d]/g, ''), tg = s.telegramUrl || '';
   return `<div class="socials">
-    ${wa ? `<a class="social-btn" href="https://wa.me/${wa}" target="_blank" rel="noopener" aria-label="WhatsApp">${I.whatsapp}</a>` : `<button class="social-btn" data-need="whatsapp" aria-label="WhatsApp" title="يُضبط رقم واتساب من لوحة الإدارة">${I.whatsapp}</button>`}
-    ${tg && !tg.includes('t.me/') || (tg && tg !== 'https://t.me/') ? `<a class="social-btn" href="${esc(tg)}" target="_blank" rel="noopener" aria-label="Telegram">${I.telegram}</a>` : `<button class="social-btn" data-need="telegram" aria-label="Telegram" title="يُضبط رابط تليجرام من لوحة الإدارة">${I.telegram}</button>`}
+    ${wa ? `<a class="social-btn" href="https://wa.me/${wa}" target="_blank" rel="noopener" aria-label="WhatsApp">${I.whatsapp}</a>` : `<button class="social-btn" data-need="whatsapp" aria-label="WhatsApp" title="لم يُضبط رقم واتساب بعد">${I.whatsapp}</button>`}
+    ${tg && !tg.includes('t.me/') || (tg && tg !== 'https://t.me/') ? `<a class="social-btn" href="${esc(tg)}" target="_blank" rel="noopener" aria-label="Telegram">${I.telegram}</a>` : `<button class="social-btn" data-need="telegram" aria-label="Telegram" title="لم يُضبط رابط تليجرام بعد">${I.telegram}</button>`}
   </div>`;
 }
 function footerHtml() {
   return `<footer class="container footer"><div>© ${new Date().getFullYear()} ${esc(state.settings.platformName || 'PES AI PRO')} — جميع الحقوق محفوظة.</div>
     <div class="flex center gap"><span class="small muted">تواصل معنا:</span>${socialsHtml()}</div>
-    <div class="small muted">مدعوم بـ Firebase Auth + Firestore · الأسعار بالجنيه المصري</div></footer>`;
+    <div class="small muted">مدعوم بـ Firebase Auth + Realtime Database · الأسعار بالجنيه المصري</div></footer>`;
 }
 function planCard(p) {
   const current = (p.code === 'pro') === isPro();
@@ -811,7 +1067,7 @@ function renderHome() {
   <section class="section container"><div class="section-head"><div><h2 class="section-title">من <span>المتجر</span></h2><p class="section-sub">خدمات رقمية يضيفها فريق PES AI PRO.</p></div><a class="btn btn-ghost btn-sm" href="#/store">المتجر كامل</a></div><div class="grid cards">${state.products.slice(0, 3).map(productCard).join('')}</div></section>
   <section class="container"><div class="card pulse center-x" style="padding:28px"><h2 class="section-title">جاهز ترتقي بمستوى فريقك؟</h2><p class="muted small mt8">انضم إلى PES AI PRO وابدأ بتحليل فريقك خلال دقيقة — بدون أي بيانات دخول إلى اللعبة.</p><div class="hero-cta" style="justify-content:center">${u ? `<button class="btn btn-gold" onclick="goProtected('analyzer')">ابدأ التحليل</button>` : `<button class="btn btn-gold" onclick="navigate('auth')">إنشاء حساب الآن</button>`}<a class="btn btn-ghost" href="#/store">تصفح الخدمات</a></div></div></section>
   ${footerHtml()}`;
-  $$('[data-need]').forEach(b => b.onclick = () => toast('سيتم تفعيل هذا الزر بعد ضبط بيانات التواصل من لوحة الإدارة', 'err'));
+  $$('[data-need]').forEach(b => b.onclick = () => toast('سيتم تفعيل هذا الزر بعد ضبط بيانات التواصل', 'err'));
 }
 
 /* ------------------------------- auth ------------------------------- */
@@ -827,12 +1083,22 @@ function renderAuth(params) {
       <div id="authBody"></div>
       <div id="recaptcha-container" style="position:fixed;bottom:0;left:0;width:1px;height:1px;overflow:hidden"></div>
     </div>
-    <p class="center-x small muted mt12">الدخول الإداري منفصل تمامًا ولا يظهر هنا. هذه الصفحة لحسابات المستخدمين فقط.</p>
+    <p class="center-x small muted mt12">هذه الصفحة لحسابات المستخدمين فقط — حساب واحد لكل الأدوات.</p>
   </div></div>${footerHtml()}`;
-  $('#googleLoginBtn').onclick = async () => {
-    const r = await Backend.loginWithGoogle();
-    if (r.error) return toast(r.error, 'err');
-    if (r.user) return authSuccess(r, next);
+  $('#googleLoginBtn').onclick = async e => {
+    const btn = e.currentTarget;
+    if (btn.disabled) return;
+    setBusy(btn, true, 'جارٍ فتح Google...');
+    try {
+      const r = await Backend.loginWithGoogle();
+      if (r.error) return toast(r.error, 'err');
+      if (r.user) return authSuccess(r, next);
+      toast('تعذر إكمال الدخول بـ Google', 'err');
+    } catch (err) {
+      toast(fbErrMsg(err), 'err');
+    } finally {
+      setBusy(btn, false);
+    }
   };
   $$('[data-authtab]').forEach(b => b.onclick = () => { $$('[data-authtab]').forEach(x => x.classList.toggle('active', x === b)); authFlow = null; renderAuthForm(b.dataset.authtab, next); });
   renderAuthForm('login', next);
@@ -840,15 +1106,15 @@ function renderAuth(params) {
 function renderAuthForm(tab, next) {
   const body = $('#authBody'); if (!body) return;
   if (tab === 'login') body.innerHTML = `<form id="loginForm">
-    <div class="field"><label>الاسم</label><input class="input" name="name" placeholder="اسمك كما سجلت" required></div>
-    <div class="field"><label>رقم الهاتف</label><input class="input" name="phone" placeholder="+201xxxxxxxxx" inputmode="tel" required></div>
-    <div class="field"><label>الرمز السري (4 أرقام — اختياري)</label><input class="input" name="pin" placeholder="اتركه فارغًا إذا لم يكن لديك رمز" inputmode="numeric" maxlength="4" pattern="[0-9]*"><div class="hint">بدون رمز سري يتم التحقق برمز OTP. لا نطلب كلمة مرور بريدك.</div></div>
+    <div class="field"><label>رقم الهاتف</label><input class="input" name="phone" type="tel" autocomplete="tel" placeholder="01012345678 أو +201012345678" inputmode="tel" required><div class="hint">يمكنك كتابة الرقم بالصيغة المصرية المحلية وسنحوّله تلقائيًا للصيغة الدولية.</div></div>
+    <div class="field"><label>الاسم (اختياري)</label><input class="input" name="name" placeholder="اسمك"></div>
+    <div class="field"><label>الرمز السري (4 أرقام — اختياري)</label><input class="input" name="pin" placeholder="اتركه فارغًا إذا لم يكن لديك رمز" inputmode="numeric" maxlength="4" pattern="[0-9]*"><div class="hint">الدخول يتم برمز تحقق SMS على هاتفك. جهازك يبقى مسجّلًا بعد أول دخول ناجح.</div></div>
     <div id="loginStep" class="hidden"></div>
     <div class="error-text" id="authError"></div>
     <button class="btn btn-gold btn-block" type="submit">دخول</button></form>`;
   if (tab === 'register') body.innerHTML = `<form id="registerForm">
     <div class="field"><label>الاسم</label><input class="input" name="name" minlength="3" required></div>
-    <div class="form-row"><div class="field"><label>رقم الهاتف</label><input class="input" name="phone" inputmode="tel" required></div><div class="field"><label>البريد الإلكتروني</label><input class="input" name="email" type="email" required></div></div>
+    <div class="form-row"><div class="field"><label>رقم الهاتف</label><input class="input" name="phone" type="tel" autocomplete="tel" placeholder="01012345678" inputmode="tel" required></div><div class="field"><label>البريد الإلكتروني</label><input class="input" name="email" type="email" autocomplete="email" required></div></div>
     <div class="field"><label>رمز سري اختياري (4 أرقام)</label><input class="input" name="pin" inputmode="numeric" maxlength="4" pattern="[0-9]*"><div class="hint">يمكنك إضافته أو تغييره لاحقًا من الإعدادات.</div></div>
     <label class="small muted" style="display:flex;gap:8px;align-items:flex-start"><input type="checkbox" name="terms" required style="margin-top:5px"> أوافق على الشروط، وأقر بأن المنصة لا تطلب بيانات دخول اللعبة.</label>
     <div id="registerStep" class="hidden"></div><div class="error-text" id="authError"></div><button class="btn btn-gold btn-block mt12" type="submit">إنشاء الحساب</button></form>`;
@@ -859,81 +1125,130 @@ function renderAuthForm(tab, next) {
     <div id="recoverStep" class="hidden"></div><div class="error-text" id="authError"></div><button class="btn btn-gold btn-block mt12" type="submit">استعادة الحساب</button></form>`;
   bindAuthForm(tab, next);
 }
-function authError(msg) { const e = $('#authError'); if (e) { e.textContent = msg; e.style.display = 'block'; } }
+function authError(msg) {
+  const e = $('#authError'); if (!e) return;
+  if (!msg) { e.textContent = ''; e.style.display = 'none'; return; }
+  e.textContent = msg; e.style.display = 'block';
+}
 function bindAuthForm(tab, next) {
   const form = $('#' + tab + 'Form'); if (!form) return;
+  const submitBtn = form.querySelector('button[type="submit"]');
   form.onsubmit = async e => {
     e.preventDefault();
-    const f = e.target, data = { name: f.elements.name.value.trim(), phone: f.elements.phone.value.trim(), pin: f.elements.pin.value.trim(), email: f.elements.email ? f.elements.email.value.trim() : '', otp: '' };
-    if (tab === 'register' && !f.elements.terms.checked) return authError('يجب الموافقة على الشروط');
-    if (tab === 'login') {
-      const r = await Backend.startLogin(data);
-      if (r.error) return authError(r.error);
-      if (r.requires_otp) { authFlow = { mode: 'login', data }; showOtpStep('loginStep', r, next); return; }
-      if (r.requires_pin) { authFlow = { mode: 'login-pin' }; showPinStep('loginStep', next); return; }
-      if (r.user) return authSuccess(r, next);
-      return authError('تعذر إكمال الدخول');
-    }
-    if (tab === 'register') {
-      const r = await Backend.startRegister(data);
-      if (r.error) return authError(r.error);
-      if (r.requires_otp) { authFlow = { mode: 'register', data }; showOtpStep('registerStep', r, next); return; }
-      if (r.user) return authSuccess(r, next);
-      return authError('تعذر إنشاء الحساب');
-    }
-    if (tab === 'recover') {
-      const r = await Backend.recoverRequest({ phone: data.phone });
-      if (r.error) return authError(r.error);
-      if (r.requires_otp) { authFlow = { mode: 'recover', data }; showOtpStep('recoverStep', r, next); return; }
-      return authError('تعذر إرسال رمز التحقق');
+    if (form.dataset.busy === '1') return;
+    const f = e.target;
+    const val = k => (f.elements[k] ? String(f.elements[k].value || '').trim() : '');
+    const data = { name: val('name'), phone: normalizePhone(val('phone')), pin: val('pin'), email: val('email') };
+    authError('');
+    if (tab !== 'recover' && data.phone.replace(/\D/g, '').length < 9) return authError('اكتب رقم هاتف صحيحًا — مثال: 01012345678 أو +201012345678');
+    if (tab === 'register' && f.elements.terms && !f.elements.terms.checked) return authError('يجب الموافقة على الشروط');
+    if (tab === 'register' && data.name.length < 3) return authError('الاسم يجب أن يكون 3 أحرف على الأقل');
+
+    form.dataset.busy = '1';
+    setBusy(submitBtn, true, tab === 'register' ? 'جارٍ إرسال رمز التحقق...' : 'جارٍ الاتصال...');
+    try {
+      if (tab === 'login') {
+        const r = await Backend.startLogin(data);
+        if (r.error) return authError(r.error);
+        if (r.requires_otp) { authFlow = { mode: 'login', data }; showOtpStep('loginStep', r, next); return; }
+        if (r.requires_pin) { authFlow = { mode: 'login-pin' }; showPinStep('loginStep', next); return; }
+        if (r.user) return authSuccess(r, next);
+        return authError('تعذر إكمال الدخول');
+      }
+      if (tab === 'register') {
+        const r = await Backend.startRegister(data);
+        if (r.error) return authError(r.error);
+        if (r.requires_otp) { authFlow = { mode: 'register', data }; showOtpStep('registerStep', r, next); return; }
+        if (r.user) return authSuccess(r, next);
+        return authError('تعذر إنشاء الحساب');
+      }
+      if (tab === 'recover') {
+        const r = await Backend.recoverRequest({ phone: data.phone });
+        if (r.error) return authError(r.error);
+        if (r.requires_otp) { authFlow = { mode: 'recover', data }; showOtpStep('recoverStep', r, next); return; }
+        return authError('تعذر إرسال رمز التحقق');
+      }
+    } catch (err) {
+      authError(fbErrMsg(err));
+    } finally {
+      form.dataset.busy = '0';
+      setBusy(submitBtn, false);
     }
   };
 }
 function showOtpStep(boxId, r, next) {
   const box = $('#' + boxId); if (!box) return;
   box.classList.remove('hidden');
-  box.innerHTML = `<div class="field"><label>رمز التحقق OTP</label><input class="input" id="otpInput" inputmode="numeric" maxlength="6" placeholder="6 أرقام"></div>
-    <div class="note info">${r.dev_code ? `رمز التحقق للتجربة: <b>${esc(r.dev_code)}</b>` : '📩 أدخل رمز التحقق المرسل إلى هاتفك.'}</div>
+  box.innerHTML = `<div class="field"><label>رمز التحقق OTP</label><input class="input" id="otpInput" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 أرقام"></div>
+    <div class="note info">${r.dev_code ? `رمز التحقق للتجربة: <b>${esc(r.dev_code)}</b>` : '📩 أدخل رمز التحقق المرسل إلى هاتفك (قد يتأخر حتى دقيقة).'}</div>
     <button class="btn btn-gold btn-block mt8" id="otpSubmit">تأكيد الرمز</button>`;
-  $('#otpInput').focus();
-  $('#otpSubmit').onclick = async () => {
-    const code = $('#otpInput').value.trim();
+  const inp = $('#otpInput'); if (inp) inp.focus();
+  const btn = $('#otpSubmit');
+  if (!btn) return;
+  btn.onclick = async () => {
+    if (btn.disabled) return;
+    const code = ($('#otpInput')?.value || '').trim();
     if (code.length < 4) return toast('أدخل رمز التحقق', 'err');
-    if (authFlow?.mode === 'register') {
-      const r = await Backend.confirmRegister(code);
-      if (r.error) return authError(r.error);
-      if (r.user) return authSuccess(r, next);
-    } else if (authFlow?.mode === 'recover') {
-      const r = await Backend.recoverVerify({ otp: code, pin: '' });
-      if (r.error) return authError(r.error);
-      if (r.user) return authSuccess(r, next);
-    } else {
-      const r = await Backend.confirmLogin(code);
-      if (r.error) return authError(r.error);
-      if (r.requires_pin) { authFlow = { mode: 'login-pin' }; showPinStep(boxId, next); return; }
-      if (r.user) return authSuccess(r, next);
+    authError('');
+    setBusy(btn, true, 'جارٍ التحقق...');
+    try {
+      if (authFlow?.mode === 'register') {
+        const r = await Backend.confirmRegister(code);
+        if (r.error) return authError(r.error);
+        if (r.user) return authSuccess(r, next);
+      } else if (authFlow?.mode === 'recover') {
+        const r = await Backend.recoverVerify({ otp: code, pin: '' });
+        if (r.error) return authError(r.error);
+        if (r.user) return authSuccess(r, next);
+      } else {
+        const r = await Backend.confirmLogin(code);
+        if (r.error) return authError(r.error);
+        if (r.requires_pin) { authFlow = { mode: 'login-pin' }; showPinStep(boxId, next); return; }
+        if (r.user) return authSuccess(r, next);
+      }
+      authError('تعذر إكمال التحقق');
+    } catch (err) {
+      authError(fbErrMsg(err));
+    } finally {
+      setBusy(btn, false);
     }
-    authError('تعذر إكمال التحقق');
   };
 }
 function showPinStep(boxId, next) {
   const box = $('#' + boxId); if (!box) return;
   box.classList.remove('hidden');
-  box.innerHTML = `<div class="field"><label>الرمز السري (4 أرقام)</label><input class="input" id="pinInput" inputmode="numeric" maxlength="4" placeholder="4 أرقام"></div><button class="btn btn-gold btn-block mt8" id="pinSubmit">تأكيد الرمز</button>`;
-  $('#pinInput').focus();
-  $('#pinSubmit').onclick = async () => {
-    const pin = $('#pinInput').value.trim();
-    const r = await Backend.verifyLoginPin(pin);
-    if (r.error) return authError(r.error);
-    if (r.user) return authSuccess(r, next);
-    authError('تعذر إكمال الدخول');
+  box.innerHTML = `<div class="field"><label>الرمز السري (4 أرقام)</label><input class="input" id="pinInput" inputmode="numeric" autocomplete="one-time-code" maxlength="4" placeholder="4 أرقام"></div><button class="btn btn-gold btn-block mt8" id="pinSubmit">تأكيد الرمز</button>`;
+  const inp = $('#pinInput'); if (inp) inp.focus();
+  const btn = $('#pinSubmit');
+  if (!btn) return;
+  btn.onclick = async () => {
+    if (btn.disabled) return;
+    const pin = ($('#pinInput')?.value || '').trim();
+    if (!/^\d{4}$/.test(pin)) return toast('الرمز السري 4 أرقام', 'err');
+    setBusy(btn, true, 'جارٍ التحقق...');
+    try {
+      const r = await Backend.verifyLoginPin(pin);
+      if (r.error) return authError(r.error);
+      if (r.user) return authSuccess(r, next);
+      authError('تعذر إكمال الدخول');
+    } catch (err) {
+      authError(fbErrMsg(err));
+    } finally {
+      setBusy(btn, false);
+    }
   };
 }
 function authSuccess(r, next) {
-  state.user = r.user; state.plan = r.plan;
+  state.user = r.user;
+  state.plan = r.plan || state.plans[0];
+  state.authReady = true;
+  persistSession();          /* كانت الجلسة تضيع عند أول تحديث للصفحة */
+  authFlow = null;
+  _bellAt = 0;
   toast('تم تسجيل الدخول بنجاح');
   renderShell();
-  navigate(next && next !== 'home' ? next : 'home');
+  const dest = next && next !== 'home' && next !== 'auth' ? next : 'home';
+  if (location.hash === '#/' + dest) renderRoute(); else navigate(dest);
 }
 /* ------------------------------- analyzer ------------------------------- */
 const an = { formation: '4-3-3', lineup: [], result: null };
@@ -1271,9 +1586,13 @@ async function acSaveProfile(e) { e.preventDefault(); const f = e.target; const 
 async function acSetPin() { const pin = ($('#acNewPin')?.value || '').trim(), current = ($('#acCurrentPin')?.value || '').trim(); if (!/^\d{4}$/.test(pin)) return toast('الرمز يجب أن يكون 4 أرقام', 'err'); const r = await Backend.setPin({ pin, current }); if (r.error) return toast(r.error, 'err'); toast('تم حفظ الرمز'); renderAccount(); }
 async function acRemovePin() { if (!confirm('إزالة الرمز السري؟')) return; const r = await Backend.removePin({ current: ($('#acCurrentPin')?.value || '').trim() }); if (r.error) return toast(r.error, 'err'); toast('تمت الإزالة'); renderAccount(); }
 async function acSaveSettings() { const body = {}; $$('[data-set]').forEach(cb => body[cb.dataset.set] = cb.checked); const r = await Backend.updateSettings(body); if (r.error) return toast(r.error, 'err'); toast('تم حفظ الإعدادات'); }
-async function acReadAll() { await Backend.markAllNotifications(); acLoadAll(); loadBell(); }
-async function acReadOne(id) { await Backend.markNotification(id); acLoadAll(); loadBell(); }
-async function aLogout() { await Backend.logout(); state.user = null; state.plan = null; state.cart = []; saveCart(); toast('تم تسجيل الخروج'); renderShell(); navigate('home'); }
+async function acReadAll() { await Backend.markAllNotifications(); acLoadAll(); loadBell(true); }
+async function acReadOne(id) { await Backend.markNotification(id); acLoadAll(); loadBell(true); }
+async function aLogout() {
+  try { await Backend.logout(); } catch (e) { }
+  state.user = null; state.plan = null; state.cart = []; saveCart(); clearSession();
+  _bellAt = 0; toast('تم تسجيل الخروج'); renderShell(); navigate('home');
+}
 function acDelete() {
   openModal('تأكيد حذف الحساب', `<div class="note warn mb12"><div>سيتم حذف جميع بياناتك نهائيًا. لا يمكن التراجع.</div></div><div class="field"><label>اكتب كلمة "حذف" للتأكيد</label><input class="input" id="acDelConfirm"></div><div class="field"><label>الرمز السري (للتأكيد)</label><input class="input" id="acDelOtp" inputmode="numeric" maxlength="6"></div><div class="note info" id="acDelInfo"></div><button class="btn btn-danger btn-block mt12" id="acDelBtn">حذف نهائي</button>`);
   let stage = 0;
@@ -1286,141 +1605,33 @@ function acDelete() {
     toast('تم حذف الحساب'); state.user = null; state.plan = null; renderShell(); navigate('home');
   };
 }
-/* ------------------------------- admin (separate route) ------------------------------- */
-let adminView = 'overview', adminPending = null, adminPlansCache = [], adminProductsCache = [];
-function adminShell(title, body) {
-  $('#bg-root').innerHTML = `<div class="bg-layer"><img src="images/bg-stadium.jpg" alt=""></div><div class="orb g1"></div><div class="orb g2"></div>`;
-  $('#topbar').innerHTML = `<div class="topbar"><div class="container topbar-in"><a class="brand" href="#/home"><img src="images/icon.png" alt="PES AI PRO"><div>PES AI PRO<small>ADMIN CONTROL</small></div></a><div class="top-actions"><span class="pill">منطقة الإدارة</span><a class="btn btn-ghost btn-sm" href="#/home">موقع المستخدمين</a>${state.admin ? `<button class="btn btn-danger btn-sm" onclick="adminLogout()">خروج</button>` : ''}</div></div></div>`;
-  $('#announcement').innerHTML = ''; $('#bottom-nav').innerHTML = ''; $('#app').innerHTML = body;
-}
-async function renderAdmin() {
-  adminShell('admin', `<div class="container section"><div class="form-wrap"><div class="center-x mb16"><img src="images/icon.png" alt="PES AI PRO" style="width:70px;height:70px;border-radius:18px;margin:0 auto 10px;border:1px solid rgba(212,175,55,.4)"><h1 class="section-title">لوحة تحكم <span>PES AI PRO</span></h1><p class="muted small">دخول منفصل تمامًا عن حسابات المستخدمين — يتطلب كلمة مرور + رمز تحقق.</p></div><div class="card" id="adminLoginCard"></div><div class="note mt12"><div>هذه الصفحة غير مرتبطة بحسابات المستخدمين. رابطها المباشر <b>#/admin</b> فقط، ولا يظهر في واجهة الموقع العامة.</div></div></div></div>`);
-  const r = await withTimeout(Backend.adminMe(), 3500).catch(() => ({ admin: null }));
-  if (r.admin) { state.admin = r.admin; renderAdminDash(); return; }
-  renderAdminLogin();
-}
-function renderAdminLogin() {
-  const card = $('#adminLoginCard'); if (!card) return;
-  card.innerHTML = `<form id="adminLoginForm" onsubmit="adminLoginSubmit(event)"><div class="field"><label>البريد الإداري</label><input class="input" name="email" type="email" required autocomplete="username"></div><div class="field"><label>كلمة المرور</label><input class="input" name="password" type="password" required autocomplete="current-password"></div><div id="adminCodeStep" class="hidden"><div class="field"><label>رمز الدخول الإداري</label><input class="input" name="code" inputmode="numeric" maxlength="6" placeholder="6 أرقام"></div><div class="note info" id="adminCodeInfo"></div></div><div class="error-text" id="adminError"></div><button class="btn btn-gold btn-block" type="submit">دخول لوحة التحكم</button></form>`;
-}
-async function adminLoginSubmit(e) {
-  e.preventDefault(); const f = e.target; const err = $('#adminError'); if (err) err.style.display = 'none';
-  const email = f.elements.email.value.trim(), password = f.elements.password.value, code = (f.elements.code?.value || '').trim();
-  if (!adminPending) {
-    const r = await withTimeout(Backend.adminLogin(email, password), 8000).catch(() => ({ error: 'تعذر الاتصال بخادم الدخول' }));
-    if (r.error) { if (err) { err.textContent = r.error; err.style.display = 'block'; } return; }
-    if (r.requires_otp || r.requires_code) {
-      adminPending = { email };
-      $('#adminCodeStep').classList.remove('hidden'); f.elements.code?.focus();
-      const info = $('#adminCodeInfo'); if (info) info.innerHTML = r.dev_code ? `رمز التحقق للتجربة: <b>${esc(r.dev_code)}</b>` : '📩 أدخل رمز التحقق المرسل إلى هاتف الأدمن.';
-      return;
-    }
-    if (r.admin) { state.admin = r.admin; renderAdminDash(); return; }
-  }
-  const r = await withTimeout(Backend.adminVerify(code), 8000).catch(() => ({ error: 'تعذر الاتصال بخادم التحقق' }));
-  if (r.error) { if (err) { err.textContent = r.error; err.style.display = 'block'; } return; }
-  state.admin = r.admin; adminPending = null; if (r.setup) toast('تم الدخول — عيّن رمز الدخول الإداري من الإعدادات', 'err'); renderAdminDash();
-}
-function renderAdminDash() {
-  adminShell('admin', `<div class="section-head" style="padding-top:16px"><div><h1 class="section-title">لوحة <span>التحكم</span></h1><p class="section-sub" id="adminWho"></p></div><div class="flex gap"><a class="btn btn-ghost btn-sm" href="#/home">عرض الموقع</a><button class="btn btn-danger btn-sm" onclick="adminLogout()">خروج</button></div></div>
-    <div class="admin-shell"><div class="side-nav" id="adminSide">${[['overview','<span class="svg-icon">' + I.chart + '</span> نظرة عامة'],['users','<span class="svg-icon">' + I.users + '</span> المستخدمون'],['plans','<span class="svg-icon">' + I.card + '</span> الباقات'],['products','<span class="svg-icon">' + I.store + '</span> الخدمات'],['orders','<span class="svg-icon">' + I.receipt + '</span> الطلبات'],['notify','<span class="svg-icon">' + I.bell + '</span> الإشعارات'],['settings','<span class="svg-icon">' + I.settings + '</span> الإعدادات'],['audit','<span class="svg-icon">' + I.memo + '</span> سجل العمليات'],['ai','<span class="svg-icon">' + I.robot + '</span> تقارير AI']].map(([v, l]) => `<button class="${v === adminView ? 'active' : ''}" data-aview="${v}">${l}</button>`).join('')}</div><div id="adminMain"></div></div>`);
-  $('#adminWho').innerHTML = `مرحبًا ${esc(state.admin.name)} — <span class="gold">${esc(state.admin.email)}</span>`;
-  $$('[data-aview]').forEach(b => b.onclick = () => { adminView = b.dataset.aview; $$('[data-aview]').forEach(x => x.classList.toggle('active', x === b)); adminLoadView(); });
-  adminLoadView();
-}
-function adminLoadView() {
-  const main = $('#adminMain'); if (!main) return;
-  main.innerHTML = '<div class="card"><div class="empty">جارٍ التحميل...</div></div>';
-  const loaders = { overview: adminOverview, users: adminUsersView, plans: adminPlansView, products: adminProductsView, orders: adminOrdersView, notify: adminNotifyView, settings: adminSettingsView, audit: adminAuditView, ai: adminAiView };
-  (loaders[adminView] || adminOverview)();
-}
-async function adminOverview() {
-  const r = await Backend.adminStats(); if (r.error) return toast(r.error, 'err'); const s = r.stats || {};
-  $('#adminMain').innerHTML = `<div class="grid cards mb16"><div class="card"><div class="card-title" style="margin:0">المستخدمون</div><div class="price" style="font-size:28px">${s.users || 0}</div><div class="small muted">نشط: ${s.activeUsers || 0} · PRO: ${s.proUsers || 0} · جديد: ${s.newUsers || 0}</div></div><div class="card"><div class="card-title" style="margin:0">الطلبات</div><div class="price" style="font-size:28px">${s.orders || 0}</div><div class="small muted">قيد المراجعة: ${s.pending || 0}</div></div><div class="card"><div class="card-title" style="margin:0">الإيرادات المؤكدة</div><div class="price" style="font-size:28px">${money(s.revenue || 0)}</div><div class="small muted">طلبات مكتملة فقط</div></div><div class="card"><div class="card-title" style="margin:0">تقارير AI</div><div class="price" style="font-size:28px">${s.reports || 0}</div><div class="small muted">تشكيلات: ${s.teams || 0} · مباريات: ${s.matches || 0}</div></div></div>
-    <div class="grid two"><div class="card"><h3 class="card-title" style="margin-top:0">أحدث المستخدمين</h3><div class="table-wrap"><table><thead><tr><th>الاسم</th><th>الهاتف</th><th>الباقة</th><th>الحالة</th></tr></thead><tbody>${(r.recentUsers || []).map(u => `<tr><td>${esc(u.name)}</td><td>${esc(u.phone)}</td><td>${esc(u.plan)}</td><td>${statusPill(u.status)}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">لا يوجد</td></tr>'}</tbody></table></div></div><div class="card"><h3 class="card-title" style="margin-top:0">أحدث الطلبات</h3><div class="table-wrap"><table><thead><tr><th>#</th><th>المستخدم</th><th>الإجمالي</th><th>الحالة</th></tr></thead><tbody>${(r.recentOrders || []).map(o => `<tr><td>${o.id}</td><td>${esc(o.user_name || '—')}</td><td>${money(o.total)}</td><td>${statusPill(o.status)}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">لا يوجد</td></tr>'}</tbody></table></div></div></div>`;
-}
-async function adminUsersView() {
-  const r = await Backend.adminUsers(); if (r.error) return toast(r.error, 'err'); const users = r.users || [];
-  $('#adminMain').innerHTML = `<div class="card"><div class="flex between center wrap gap mb12"><h3 class="card-title" style="margin:0">إدارة المستخدمين (${users.length})</h3><input class="input" id="adminUserSearch" placeholder="بحث..." style="max-width:260px" oninput="adminFilterUsers(this.value)"></div><div class="table-wrap"><table><thead><tr><th>الاسم</th><th>الهاتف</th><th>البريد</th><th>الباقة</th><th>الحالة</th><th>إجراءات</th></tr></thead><tbody id="adminUserRows">${users.map(u => `<tr data-user-row><td>${esc(u.name)}</td><td>${esc(u.phone)}</td><td>${esc(u.email)}</td><td>${esc(u.plan)}${u.plan_expires_at ? `<div class="small muted">${dateAr(u.plan_expires_at)}</div>` : ''}</td><td>${statusPill(u.status)}</td><td><div class="flex gap"><button class="btn btn-ghost btn-sm" onclick="adminUserAction('${esc(u.id)}','${u.status === 'active' ? 'suspended' : 'active'}')">${u.status === 'active' ? 'إيقاف' : 'تفعيل'}</button><button class="btn btn-gold btn-sm" onclick="adminUserAction('${esc(u.id)}','pro')">منح PRO</button><button class="btn btn-ghost btn-sm" onclick="adminUserAction('${esc(u.id)}','free')">FREE</button></div></td></tr>`).join('')}</tbody></table></div></div>`;
-}
-function adminFilterUsers(q) { const s = q.toLowerCase(); $$('[data-user-row]').forEach(tr => { tr.style.display = tr.innerText.toLowerCase().includes(s) ? '' : 'none'; }); }
-async function adminUserAction(id, action) {
-  const body = action === 'pro' ? { plan: 'pro', extend_days: 30 } : action === 'free' ? { plan: 'free' } : { status: action };
-  const r = await Backend.adminUserUpdate(id, body); if (r.error) return toast(r.error, 'err'); toast('تم التحديث'); adminUsersView();
-}
-async function adminPlansView() {
-  const r = await Backend.adminPlans(); if (r.error) return toast(r.error, 'err'); const plans = r.plans || []; adminPlansCache = plans;
-  $('#adminMain').innerHTML = `<div class="card"><div class="flex between center mb12"><h3 class="card-title" style="margin:0">الباقات والأسعار</h3><button class="btn btn-gold btn-sm" onclick="adminPlanModal()">+ باقة جديدة</button></div><div class="table-wrap"><table><thead><tr><th>الاسم</th><th>السعر</th><th>المدة</th><th>الحالة</th><th>إجراءات</th></tr></thead><tbody>${plans.map(p => `<tr><td>${esc(p.name)}<div class="small muted">${esc(p.code)}</div></td><td>${money(p.price)}</td><td>${p.durationDays || p.duration_days || 30} يوم</td><td>${p.isActive !== false ? '<span class="pill green">مفعّلة</span>' : '<span class="pill gray">موقوفة</span>'}</td><td><div class="flex gap"><button class="btn btn-ghost btn-sm" onclick="adminPlanModal('${esc(p.id)}')">تعديل</button><button class="btn btn-danger btn-sm" onclick="adminPlanDelete('${esc(p.id)}')">حذف</button></div></td></tr>`).join('')}</tbody></table></div></div>`;
-}
-function adminPlanModal(id) {
-  const existing = id ? adminPlansCache.find(p => p.id === id) : null; const p = existing || { name: '', tagline: '', price: 99, durationDays: 30, features: [], isActive: true, isPublic: true };
-  openModal(id ? 'تعديل الباقة' : 'باقة جديدة', `<div class="form-row"><div class="field"><label>الاسم</label><input class="input" id="apName" value="${esc(p.name)}"></div><div class="field"><label>السعر</label><input class="input" id="apPrice" type="number" min="0" value="${p.price}"></div></div><div class="form-row"><div class="field"><label>المدة (يوم)</label><input class="input" id="apDays" type="number" min="1" value="${p.durationDays || 30}"></div><div class="field"><label>وصف مختصر</label><input class="input" id="apTag" value="${esc(p.tagline || '')}"></div></div><div class="field"><label>المميزات (سطر لكل ميزة)</label><textarea class="input" id="apFeatures">${esc((p.features || []).join('\n'))}</textarea></div><div class="flex gap wrap mb12"><label class="small"><input type="checkbox" id="apActive" ${p.isActive !== false ? 'checked' : ''}> مفعّلة</label><label class="small"><input type="checkbox" id="apPublic" ${p.isPublic !== false ? 'checked' : ''}> ظاهرة</label></div><button class="btn btn-gold btn-block" onclick="adminPlanSave('${id || ''}')">حفظ</button>`);
-}
-async function adminPlanSave(id) {
-  const body = { name: $('#apName').value, price: +$('#apPrice').value, durationDays: +$('#apDays').value, tagline: $('#apTag').value, features: $('#apFeatures').value.split('\n').map(x => x.trim()).filter(Boolean), isActive: $('#apActive').checked, isPublic: $('#apPublic').checked };
-  const r = await Backend.adminPlanSave(id || null, body); if (r.error) return toast(r.error, 'err'); closeModal(); toast('تم الحفظ'); state.plans = (await Backend.getPlans()).plans; adminPlansView();
-}
-async function adminPlanDelete(id) { if (!confirm('إيقاف هذه الباقة؟')) return; const r = await Backend.adminPlanDelete(id); if (r.error) return toast(r.error, 'err'); toast('تم'); adminPlansView(); }
-async function adminProductsView() {
-  const r = await Backend.adminProducts(); if (r.error) return toast(r.error, 'err'); const products = r.products || []; adminProductsCache = products;
-  $('#adminMain').innerHTML = `<div class="card"><div class="flex between center mb12"><h3 class="card-title" style="margin:0">خدمات المتجر</h3><button class="btn btn-gold btn-sm" onclick="adminProductModal()">+ خدمة جديدة</button></div><div class="table-wrap"><table><thead><tr><th>الخدمة</th><th>السعر</th><th>التصنيف</th><th>الحالة</th><th>إجراءات</th></tr></thead><tbody>${products.map(p => `<tr><td>${esc(p.name)}<div class="small muted">${esc(p.shortDescription || '')}</div></td><td>${money(p.price)}</td><td>${esc(p.category)}</td><td>${p.isActive !== false ? '<span class="pill green">ظاهرة</span>' : '<span class="pill gray">مخفية</span>'}</td><td><div class="flex gap"><button class="btn btn-ghost btn-sm" onclick="adminProductModal('${esc(p.id)}')">تعديل</button><button class="btn btn-danger btn-sm" onclick="adminProductDelete('${esc(p.id)}')">إخفاء</button></div></td></tr>`).join('')}</tbody></table></div></div>`;
-}
-function adminProductModal(id) {
-  const existing = id ? adminProductsCache.find(p => p.id === id) : null; const p = existing || { name: '', shortDescription: '', description: '', details: [], price: 99, imageUrl: 'images/efootball-hero.jpg', category: 'analysis', badge: '', isActive: true };
-  openModal(id ? 'تعديل الخدمة' : 'خدمة جديدة', `<div class="field"><label>اسم الخدمة</label><input class="input" id="adName" value="${esc(p.name)}"></div><div class="field"><label>وصف مختصر</label><input class="input" id="adShort" value="${esc(p.shortDescription || '')}"></div><div class="field"><label>وصف تفصيلي</label><textarea class="input" id="adDesc">${esc(p.description || '')}</textarea></div><div class="field"><label>التفاصيل (سطر لكل تفصيل)</label><textarea class="input" id="adDetails">${esc((p.details || []).join('\n'))}</textarea></div><div class="form-row"><div class="field"><label>السعر</label><input class="input" id="adPrice" type="number" min="0" value="${p.price}"></div><div class="field"><label>التصنيف</label><select class="input" id="adCat">${['analysis','squad','coaching'].map(c => `<option value="${c}" ${p.category === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div></div><div class="form-row"><div class="field"><label>رابط الصورة</label><input class="input" id="adImg" value="${esc(p.imageUrl || '')}"></div><div class="field"><label>شارة</label><input class="input" id="adBadge" value="${esc(p.badge || '')}"></div></div><label class="small mb12"><input type="checkbox" id="adActive" ${p.isActive !== false ? 'checked' : ''}> ظاهرة في المتجر</label><button class="btn btn-gold btn-block" onclick="adminProductSave('${id || ''}')">حفظ</button>`);
-}
-async function adminProductSave(id) {
-  const body = { name: $('#adName').value, shortDescription: $('#adShort').value, description: $('#adDesc').value, details: $('#adDetails').value.split('\n').map(x => x.trim()).filter(Boolean), price: +$('#adPrice').value, category: $('#adCat').value, imageUrl: $('#adImg').value, badge: $('#adBadge').value, isActive: $('#adActive').checked };
-  const r = await Backend.adminProductSave(id || null, body); if (r.error) return toast(r.error, 'err'); closeModal(); toast('تم الحفظ'); state.products = (await Backend.getProducts()).products; adminProductsView();
-}
-async function adminProductDelete(id) { if (!confirm('إخفاء الخدمة؟')) return; const r = await Backend.adminProductDelete(id); if (r.error) return toast(r.error, 'err'); toast('تم'); adminProductsView(); }
-function adminRenderOrders(filter) {
-  const orders = (window.__adminOrders || []).filter(o => filter === 'all' || o.status === filter);
-  const box = $('#adminOrdersTable'); if (!box) return;
-  box.innerHTML = `<div class="table-wrap"><table><thead><tr><th>#</th><th>المستخدم</th><th>النوع</th><th>الإجمالي</th><th>المرجع</th><th>الحالة</th><th>إجراءات</th></tr></thead><tbody>${orders.map(o => `<tr><td>${o.id}</td><td>${esc(o.user_name || '—')}<div class="small muted">${esc(o.user_phone || '')}</div></td><td>${o.type === 'subscription' ? 'اشتراك ' + esc(o.plan_name || '') : esc(o.product_name || 'خدمة')}</td><td>${money(o.total)}</td><td class="small">${esc(o.payment_reference || '—')}<div class="muted">${esc(o.payment_method || '')}</div></td><td>${statusPill(o.status)}</td><td>${o.status === 'pending_review' ? `<div class="flex gap"><button class="btn btn-gold btn-sm" onclick="adminOrderAction('${esc(o.id)}','approve')">تأكيد</button><button class="btn btn-danger btn-sm" onclick="adminOrderAction('${esc(o.id)}','reject')">رفض</button></div>` : '<span class="small muted">—</span>'}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">لا طلبات.</td></tr>'}</tbody></table></div>`;
-}
-async function adminOrdersView() {
-  const r = await Backend.adminOrders(); if (r.error) return toast(r.error, 'err'); window.__adminOrders = r.orders || []; const orders = window.__adminOrders;
-  $('#adminMain').innerHTML = `<div class="card"><div class="flex between center wrap gap mb12"><h3 class="card-title" style="margin:0">إدارة الطلبات (${orders.length})</h3><select class="input" id="adminOrderFilter" style="max-width:200px" onchange="adminRenderOrders(this.value)"><option value="all">الكل</option><option value="pending_review">قيد المراجعة</option><option value="completed">مكتمل</option><option value="rejected">مرفوض</option></select></div><div id="adminOrdersTable"></div></div>`;
-  adminRenderOrders('all');
-}
-function adminOrderAction(id, action) {
-  openModal(action === 'approve' ? 'تأكيد الطلب' : 'رفض الطلب', `<div class="note ${action === 'approve' ? '' : 'warn'} mb12"><div>${action === 'approve' ? 'سيتم تأكيد الدفع وتفعيل الطلب/الاشتراك وإشعار المستخدم.' : 'سيتم رفض الطلب وإشعار المستخدم.'}</div></div><div class="field"><label>ملاحظة</label><input class="input" id="adminOrderNote"></div><button class="btn ${action === 'approve' ? 'btn-gold' : 'btn-danger'} btn-block" onclick="adminOrderConfirm('${esc(id)}','${action}')">تأكيد</button>`);
-}
-async function adminOrderConfirm(id, action) { const r = await Backend.adminOrderAction(id, action, $('#adminOrderNote').value); if (r.error) return toast(r.error, 'err'); closeModal(); toast('تم التحديث'); adminOrdersView(); }
-function adminNotifyView() {
-  $('#adminMain').innerHTML = `<div class="card"><h3 class="card-title" style="margin-top:0">إرسال إشعار للمستخدمين</h3><div class="field"><label>العنوان</label><input class="input" id="anTitle" placeholder="عنوان الإشعار"></div><div class="field"><label>النص</label><textarea class="input" id="anBody" placeholder="نص الإشعار"></textarea></div><div class="form-row"><div class="field"><label>الجمهور</label><select class="input" id="anAudience"><option value="all">الكل</option><option value="pro">مشتركو PRO</option><option value="free">المجانية</option></select></div><div class="field"><label>رابط</label><input class="input" id="anLink" placeholder="#/subscriptions"></div></div><button class="btn btn-gold btn-block" onclick="adminBroadcast()">إرسال الإشعار</button><div class="note mt12"><div>الإشعارات تُخزّن في قاعدة البيانات وتظهر للمستخدم في حسابه.</div></div></div>`;
-}
-async function adminBroadcast() { const body = { title: $('#anTitle').value, body: $('#anBody').value, audience: $('#anAudience').value, link: $('#anLink').value }; if (!body.title) return toast('أدخل العنوان', 'err'); const r = await Backend.adminBroadcast(body); if (r.error) return toast(r.error, 'err'); toast(r.message || 'تم الإرسال'); }
-async function adminSettingsView() {
-  const r = await Backend.adminSettings(); if (r.error) return toast(r.error, 'err'); const s = r.settings || {};
-  $('#adminMain').innerHTML = `<div class="grid two"><div class="card"><h3 class="card-title" style="margin-top:0">إعدادات المنصة</h3><div class="field"><label>اسم المنصة</label><input class="input" id="asName" value="${esc(s.platformName || '')}"></div><div class="field"><label>الشعار النصي</label><input class="input" id="asTag" value="${esc(s.tagline || '')}"></div><div class="field"><label>رقم واتساب (دولي بدون +)</label><input class="input" id="asWa" value="${esc(s.whatsappNumber || '')}"><div class="hint">مثال: 201000000000 — يظهر كرابط فقط.</div></div><div class="field"><label>رابط تليجرام</label><input class="input" id="asTg" value="${esc(s.telegramUrl || '')}"><div class="hint">اتركه فارغًا لإخفاء الزر.</div></div><div class="field"><label>بريد الدعم</label><input class="input" id="asEmail" value="${esc(s.supportEmail || '')}"></div><div class="field"><label>إعلان المنصة</label><textarea class="input" id="asAnnounce">${esc(s.announcement || '')}</textarea></div></div>
-    <div class="card"><h3 class="card-title" style="margin-top:0">الدفع والوصول</h3><div class="field"><label>ملاحظة الدفع</label><textarea class="input" id="asPay">${esc(s.paymentsNote || '')}</textarea></div><div class="form-row"><div class="field"><label>معرّف InstaPay</label><input class="input" id="asInsta" value="${esc(s.instapayHandle || '')}"></div><div class="field"><label>رقم Vodafone Cash</label><input class="input" id="asVodafone" value="${esc(s.vodafoneCash || '')}"></div></div><div class="field"><label>موديل AI</label><input class="input" id="asModel" value="${esc(s.aiModel || 'gpt-4o-mini')}"></div><div class="field"><label>رمز الدخول الإداري الجديد (6 أرقام)</label><input class="input" id="asAdminCode" inputmode="numeric" maxlength="6" placeholder="اتركه فارغًا للإبقاء على الحالي"><div class="hint">يُخزّن مشفّرًا (PBKDF2) في Firestore، ولا يظهر في الواجهة.</div></div><div class="note ${r.ai?.enabled ? '' : 'warn'}"><div>حالة AI: ${r.ai?.enabled ? 'مفعّل' : 'غير مفعّل — استخدم المحرك المحلي'}. موديل: ${esc(r.ai?.model || '')}</div></div><button class="btn btn-gold btn-block mt12" onclick="adminSaveSettings()">حفظ الإعدادات</button></div></div>`;
-}
-async function adminSaveSettings() {
-  const body = { platform_name: $('#asName').value, tagline: $('#asTag').value, whatsapp_number: $('#asWa').value, telegram_url: $('#asTg').value, support_email: $('#asEmail').value, announcement: $('#asAnnounce').value, payments_note: $('#asPay').value, instapay_handle: $('#asInsta').value, vodafone_cash: $('#asVodafone').value, ai_model: $('#asModel').value, admin_access_code: $('#asAdminCode').value };
-  const r = await Backend.adminSettingsSave(body); if (r.error) return toast(r.error, 'err'); toast('تم حفظ الإعدادات'); state.settings = (await Backend.bootstrap()).settings; renderShell();
-}
-async function adminAuditView() {
-  const r = await Backend.adminAudit(); if (r.error) return toast(r.error, 'err'); const logs = r.logs || [];
-  $('#adminMain').innerHTML = `<div class="card"><h3 class="card-title" style="margin-top:0">سجل العمليات الإدارية</h3><div class="table-wrap"><table><thead><tr><th>#</th><th>الإجراء</th><th>الكيان</th><th>بواسطة</th><th>الوقت</th></tr></thead><tbody>${logs.map(l => `<tr><td>${l.id}</td><td>${esc(l.action)}</td><td>${esc(l.entity || '—')}</td><td>${esc(l.admin_name || l.adminName || '—')}</td><td>${dateTimeAr(l.created_at || l.createdAt)}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">لا سجلات بعد.</td></tr>'}</tbody></table></div></div>`;
-}
-async function adminAiView() {
-  const r = await Backend.adminAi(); if (r.error) return toast(r.error, 'err');
-  $('#adminMain').innerHTML = `<div class="grid cards mb16"><div class="card"><div class="card-title" style="margin:0">إجمالي التقارير</div><div class="price" style="font-size:28px">${r.total || 0}</div></div>${(r.byKind || []).map(k => `<div class="card"><div class="card-title" style="margin:0">${esc(k.kind)}</div><div class="price" style="font-size:24px">${k.c}</div></div>`).join('')}</div><div class="grid two"><div class="card"><h3 class="card-title" style="margin-top:0">حسب المحرك</h3>${(r.byEngine || []).map(e => `<div class="kv"><span>${esc(e.engine || '—')}</span><b>${e.c}</b></div>`).join('') || '<div class="empty">لا بيانات</div>'}</div><div class="card"><h3 class="card-title" style="margin-top:0">أكثر المستخدمين</h3><div class="table-wrap"><table><thead><tr><th>المستخدم</th><th>الباقة</th><th>التقارير</th></tr></thead><tbody>${(r.topUsers || []).map(u => `<tr><td>${esc(u.name)}</td><td>${esc(u.plan)}</td><td>${u.c}</td></tr>`).join('')}</tbody></table></div></div></div>`;
-}
-async function adminLogout() { await Backend.logout(); state.admin = null; adminPending = null; toast('تم الخروج'); renderAdmin(); }
 /* ------------------------------- init ------------------------------- */
 document.addEventListener('click', e => {
   const need = e.target.closest('[data-need]');
-  if (need) { toast('سيتم تفعيل هذا الزر بعد ضبط بيانات التواصل من لوحة الإدارة', 'err'); }
+  if (need) { toast('سيتم تفعيل هذا الزر بعد ضبط بيانات التواصل', 'err'); }
 });
 window.addEventListener('hashchange', () => { renderRoute(); });
+window.addEventListener('offline', () => toast('انقطع الاتصال بالإنترنت — المنصة هتعرض بياناتك المحفوظة', 'err'));
+window.addEventListener('online', () => {
+  toast('رجع الاتصال — جارٍ تحديث البيانات');
+  _dbIssueKey = ''; _dbIssueAt = 0;
+  try { refreshPublicData(); } catch (e) { }
+  if (state.user) {
+    loadBell(true);
+    Backend.doc('users/' + state.user.id)
+      .then(p => p && Backend.planInfo(p).then(pl => { state.plan = pl; persistSession(); renderShell(); }).catch(() => { }))
+      .catch(() => { });
+  }
+});
 function startApp() {
   const app = $('#app'); if (app && !app.dataset.ready) { app.dataset.ready = '1'; app.innerHTML = '<div class="container section"><div class="card"><div class="empty">جارٍ تحميل منصة PES AI PRO...</div></div></div>'; }
   boot().catch(e => { console.error('BOOT ERROR', e); toast('خطأ في تحميل الصفحة: ' + e.message, 'err'); });
 }
-window.addEventListener('unhandledrejection', e => console.error('UNHANDLED', e.reason));
+window.addEventListener('unhandledrejection', e => {
+  console.error('UNHANDLED', e.reason);
+  /* أي خطأ غير معالج يظهر للمستخدم برسالة عربية بدل صمت تام */
+  try { toast(fbErrMsg(e.reason || {}), 'err'); } catch (x) { }
+});
 document.addEventListener('DOMContentLoaded', startApp);
 if (document.readyState !== 'loading') startApp();
 

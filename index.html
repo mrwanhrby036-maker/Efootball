@@ -7,17 +7,23 @@
 <title>PES AI PRO — منصة الذكاء الاصطناعي لـ eFootball</title>
 <meta name="description" content="PES AI PRO — تحليل الفرق والتشكيلات واللاعبين بالذكاء الاصطناعي، بناء التشكيلات، تحليل المباريات، ومتجر خدمات احترافي.">
 <link rel="icon" href="images/icon.png">
+<!-- اتصال مبكر بخدمات Firebase: يوفّر ثواني في أول تحميل -->
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://hamo-8132e-default-rtdb.firebaseio.com" crossorigin>
+<link rel="preconnect" href="https://www.google.com" crossorigin>
+<link rel="dns-prefetch" href="https://firebaseinstallations.googleapis.com">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <div id="bg-root"></div>
 
 <div id="splash" class="splash">
-  <img class="splash-bg" src="images/bg-stadium.jpg" alt="">
-  <img class="splash-hero" src="images/efootball-hero.jpg" alt="eFootball">
+  <img class="splash-bg" src="images/bg-stadium.jpg" width="1600" height="669" alt="" decoding="async">
+  <img class="splash-hero" src="images/efootball-hero.jpg" width="900" height="1350" alt="" decoding="async">
   <div class="splash-glow"></div>
   <div class="splash-in">
-    <img class="splash-icon" src="images/icon.png" alt="PES AI PRO">
+    <img class="splash-icon" src="images/icon.png" width="112" height="112" alt="PES AI PRO" fetchpriority="high">
     <h1 class="gold-text">PES AI PRO</h1>
     <div class="tag">YOUR TEAM. YOUR POWER. YOUR AI.</div>
     <div class="splash-bar"><i></i></div>
@@ -32,11 +38,15 @@
 <div id="modal-root"></div>
 <div id="toast-root" class="toast-wrap"></div>
 
-<!-- Firebase SDK (compat) — منصة سحابية متكاملة 100% عبر Firebase -->
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
-<script src="app.js"></script>
+<noscript>
+  <div style="padding:24px;text-align:center;color:#d4af37">يجب تفعيل JavaScript لتشغيل منصة PES AI PRO.</div>
+</noscript>
+
+<!-- Firebase SDK (compat) — defer: لا يعطّل رسم الصفحة. البيانات كلها على Realtime Database -->
+<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<!-- firebase-storage يُحمَّل عند الحاجة فقط (رفع صورة) لتسريع التحميل الأول -->
+<script defer src="app.js"></script>
 </body>
 </html>
