@@ -16,8 +16,35 @@ const firebaseConfig = {
   measurementId: "G-SG25P8MMEG"
 };
 
-if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-const fb = { auth: firebase.auth(), db: firebase.firestore(), storage: firebase.storage() };
+/* تحميل Firebase بشكل آمن: لو فشل تحميل SDK (شبكة/حجب) لا تتوقف الصفحة كلها */
+const SDK_OK = (typeof firebase !== 'undefined') && !!firebase && !!firebase.apps;
+if (SDK_OK && !firebase.apps.length) firebase.initializeApp(firebaseConfig);
+const fb = { auth: null, db: null };
+if (SDK_OK) {
+  try { fb.auth = firebase.auth(); } catch (e) { console.error('Auth init failed', e); }
+  try { fb.db = firebase.firestore(); } catch (e) { console.error('Firestore init failed', e); }
+}
+/* firebase-storage (~150KB) لا يُحمَّل إلا عند رفع صورة — أسرع في التحميل الأول */
+let _storageSdkPromise = null;
+function loadScriptOnce(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src; s.async = true;
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('فشل تحميل مكتبة التخزين'));
+    document.head.appendChild(s);
+  });
+}
+async function storageService() {
+  if (!SDK_OK) throw new Error('خدمات Firebase غير متاحة حاليًا');
+  if (!_storageSdkPromise) {
+    _storageSdkPromise = window.firebase.storage
+      ? Promise.resolve()
+      : loadScriptOnce('https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js');
+  }
+  await _storageSdkPromise;
+  return window.firebase.app().storage();
+}
 
 /* ------------------------------- helpers ------------------------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -31,6 +58,76 @@ const dateAr = s => { if (!s) return '—'; try { const d = new Date(String(s).r
 const dateTimeAr = s => { if (!s) return '—'; try { const d = new Date(String(s).replace(' ', 'T') + (String(s).includes('T') ? '' : 'Z')); return d.toLocaleString('ar-EG', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch (e) { return s; } };
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ------------------------- أدوات الأداء ورسائل الأخطاء ------------------------- */
+/* توحيد رقم الهاتف للصيغة الدولية (يمنع فشل OTP بسبب الصيغة المحلية) */
+function normalizePhone(raw) {
+  let p = String(raw || '').replace(/[^\d+]/g, '');
+  if (p.startsWith('00')) p = '+' + p.slice(2);
+  if (p.startsWith('+')) return p;
+  if (/^01\d{9}$/.test(p)) return '+20' + p.slice(1);      // 01xxxxxxxxx مصري
+  if (/^1\d{9}$/.test(p)) return '+20' + p;                 // 1xxxxxxxxx بدون صفر
+  if (/^20\d{10}$/.test(p)) return '+' + p;                 // 20xxxxxxxxxx
+  if (/^0\d{8,10}$/.test(p)) return '+20' + p.slice(1);
+  return p ? '+' + p : '';
+}
+/* تحويل أخطاء Firebase إلى رسالة عربية مفهومة بدل صمت أو إنجليزي */
+function fbErrMsg(err) {
+  const code = String((err && (err.code || err.message)) || '').toLowerCase();
+  const table = [
+    ['timeout', 'الخدمة تأخرت في الرد (شبكة ضعيفة). جرّب مرة أخرى — لا تُغلق الصفحة.'],
+    ['unavailable', 'تعذر الوصول لخدمات Firebase (شبكة/حجب إعلانات). تحقق من الاتصال وأعد المحاولة.'],
+    ['auth/invalid-phone-number', 'رقم الهاتف غير صحيح. اكتبه بالصيغة الدولية: +201012345678.'],
+    ['auth/missing-phone-number', 'اكتب رقم الهاتف أولًا.'],
+    ['auth/too-many-requests', 'محاولات كثيرة على هذا الرقم. انتظر بضع دقائق ثم أعد المحاولة.'],
+    ['auth/quota-exceeded', 'تم استهلاك حد رسائل التحقق اليومي للمنصة. جرّب لاحقًا أو استخدم الدخول بحساب Google.'],
+    ['auth/operation-not-allowed', 'الدخول بالهاتف غير مفعّل في Firebase (Phone sign-in). فعّله من Firebase Console أو استخدم الدخول بحساب Google.'],
+    ['auth/unauthorized-domain', 'هذا النطاق غير مصرّح به في Firebase. أضفه من Authentication ← Settings ← Authorized domains.'],
+    ['auth/captcha-check-failed', 'فشل التحقق الأمني (reCAPTCHA). حدّث الصفحة وأعد المحاولة.'],
+    ['auth/invalid-app-credential', 'فشل التحقق الأمني للجهاز. حدّث الصفحة أو جرّب متصفحًا آخر (لا تستخدم وضع التصفح الخاص).'],
+    ['auth/invalid-verification-code', 'رمز التحقق غير صحيح. راجع الرقم وأعد المحاولة.'],
+    ['auth/code-expired', 'انتهت صلاحية رمز التحقق. اضغط إعادة الإرسال.'],
+    ['auth/network-request-failed', 'الشبكة ضعيفة أو مقطوعة. تحقق من الإنترنت وأعد المحاولة.'],
+    ['auth/web-storage-unsupported', 'المتصفح يمنع التخزين (وضع خاص/إعدادات صارمة). اسمح بالملفات المؤقتة.'],
+    ['auth/popup-blocked', 'المتصفح منع نافذة Google. اسمح بالنوافذ المنبثقة وأعد المحاولة.'],
+    ['auth/popup-closed-by-user', 'أُغلقت نافذة Google قبل إكمال الدخول.'],
+    ['auth/cancelled-popup-request', 'تم إلغاء نافذة Google. أعد المحاولة.'],
+    ['auth/internal-error', 'خطأ داخلي من خدمة المصادقة. أعد المحاولة بعد تحديث الصفحة.'],
+    ['auth/user-disabled', 'الحساب موقوف. تواصل مع الدعم.'],
+    ['auth/wrong-password', 'كلمة المرور غير صحيحة.'],
+    ['auth/user-not-found', 'لا يوجد حساب بهذا البريد.'],
+    ['auth/email-already-in-use', 'البريد مستخدم بالفعل.'],
+    ['auth/invalid-email', 'البريد الإلكتروني غير صحيح.'],
+    ['permission-denied', 'ليس لديك صلاحية لهذا الإجراء (Firestore rules).'],
+    ['failed-precondition', 'قاعدة البيانات تحتاج فهرسًا (index) لهذا الاستعلام.']
+  ];
+  for (const [k, msg] of table) if (code.includes(k)) return msg;
+  const raw = (err && (err.message || err.code)) || 'حدث خطأ غير متوقع';
+  return String(raw);
+}
+/* زر يتغيّر لشكل "جارٍ التنفيذ" ويمنع الضغط المزدوج */
+function setBusy(btn, busy, label) {
+  if (!btn) return;
+  if (busy) {
+    if (!btn.dataset.label) btn.dataset.label = btn.innerHTML;
+    btn.disabled = true;
+    btn.style.opacity = '.75';
+    btn.innerHTML = `<span class="spinner" style="width:15px;height:15px;display:inline-block;vertical-align:-3px;margin-inline-end:7px"></span>${esc(label || 'جارٍ التنفيذ...')}`;
+  } else {
+    btn.disabled = false;
+    btn.style.opacity = '';
+    if (btn.dataset.label) { btn.innerHTML = btn.dataset.label; delete btn.dataset.label; }
+  }
+}
+function persistSession() {
+  try {
+    if (state.user) localStorage.setItem('pesai_user', JSON.stringify(state.user)); else localStorage.removeItem('pesai_user');
+    if (state.user && state.plan) localStorage.setItem('pesai_plan', JSON.stringify(state.plan)); else localStorage.removeItem('pesai_plan');
+  } catch (e) { }
+}
+function clearSession() {
+  try { localStorage.removeItem('pesai_user'); localStorage.removeItem('pesai_plan'); } catch (e) { }
+}
 
 function toast(msg, type = 'ok') {
   const root = $('#toast-root'); if (!root) return;
@@ -216,7 +313,7 @@ class FirebaseBackend {
   constructor() { this.mode = 'firebase'; this._reg = null; this._login = null; this._recover = null; }
   db() { return fb.db; }
   auth() { return fb.auth; }
-  user() { return this.auth().currentUser; }
+  user() { return this.auth() ? this.auth().currentUser : null; }
   async doc(path) {
     try {
       const s = await this.db().doc(path).get();
@@ -289,64 +386,101 @@ class FirebaseBackend {
   async makePin(pin) { const salt = uid(); return { pin_hash: await this.hashPin(pin, salt), pin_salt: salt }; }
   async verifyPin(pin, hash, salt) { return hash === (await this.hashPin(pin, salt)); }
   recaptcha() {
-    if (!document.getElementById('recaptcha-container')) throw new Error('recaptcha-container missing');
+    if (!SDK_OK) throw new Error('خدمات Firebase غير متاحة');
+    if (!document.getElementById('recaptcha-container')) {
+      const box = document.createElement('div');
+      box.id = 'recaptcha-container';
+      box.style.cssText = 'position:fixed;bottom:0;left:0;width:1px;height:1px;overflow:hidden';
+      document.body.appendChild(box);
+    }
     if (this._verifier) { try { this._verifier.clear(); } catch (e) { } }
     this._verifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', { size: 'invisible' });
     return this._verifier;
   }
+  /* غلاف موحّد لطلبات الهاتف: يمنع تعليق الواجهة ويرجّع رسالة مفهومة */
+  async _phoneStart(phone) {
+    try {
+      if (!SDK_OK) return { error: 'خدمات Firebase لم تُحمَّل. تحقق من الاتصال بالإنترنت ثم حدّث الصفحة.' };
+      const verifier = this.recaptcha();
+      const confirmation = await withTimeout(this.auth().signInWithPhoneNumber(phone, verifier), 45000);
+      return { confirmation };
+    } catch (err) {
+      return { error: fbErrMsg(err) };
+    }
+  }
   async startRegister(data) {
-    const verifier = this.recaptcha();
-    const confirmation = await this.auth().signInWithPhoneNumber(data.phone, verifier);
-    this._reg = { confirmation, data };
+    const r = await this._phoneStart(data.phone);
+    if (r.error) return { error: r.error };
+    this._reg = { confirmation: r.confirmation, data };
     return { requires_otp: true, delivery: { delivered: true, channel: 'sms' }, message: 'أدخل رمز التحقق المرسل إلى هاتفك' };
   }
   async confirmRegister(code) {
-    if (!this._reg) return { error: 'انتهت الجلسة، أعد المحاولة' };
-    const cred = await this._reg.confirmation.confirm(code);
+    if (!this._reg) return { error: 'انتهت جلسة التحقق، أعد المحاولة من البداية' };
+    let cred;
+    try { cred = await withTimeout(this._reg.confirmation.confirm(code), 30000); }
+    catch (err) { return { error: fbErrMsg(err) }; }
     const u = cred.user, d = this._reg.data;
-    const pin = d.pin ? await this.makePin(d.pin) : {};
-    const profile = { id: u.uid, name: d.name, phone: d.phone, email: d.email, pin_hash: pin.pin_hash || null, pin_salt: pin.pin_salt || null, status: 'active', plan: 'free', plan_expires_at: null, ai_usage_count: 0, created_at: nowStr(), last_login_at: nowStr() };
-    await this.db().doc('users/' + u.uid).set(profile);
-    await this.db().doc('userSettings/' + u.uid).set({ notify_orders: true, notify_subscription: true, notify_platform: true, notify_ai: true, public_stats: false, marketing: false });
-    await this.db().collection('notifications').add({ userId: u.uid, type: 'welcome', title: `أهلًا بك في PES AI PRO <span class="svg-icon">${I.party}</span>`, body: 'تم إنشاء حسابك بنجاح. ابدأ ببناء تشكيلتك أو حلّل فريقك.', link: '#/builder', is_read: false, created_at: nowStr() });
-    await this.db().doc('users/' + u.uid).update({ last_login_at: nowStr() });
-    this._reg = null;
-    return { user: await this.publicUser(profile), plan: await this.planInfo(profile) };
+    try {
+      const existing = await withTimeout(this.doc('users/' + u.uid), 8000);
+      if (existing) {
+        await this.auth().signOut();
+        this._reg = null;
+        return { error: 'هذا الرقم مسجّل بالفعل — استخدم تبويب «تسجيل الدخول».' };
+      }
+      const pin = d.pin ? await this.makePin(d.pin) : {};
+      const profile = { id: u.uid, name: d.name, phone: d.phone, email: d.email, pin_hash: pin.pin_hash || null, pin_salt: pin.pin_salt || null, status: 'active', plan: 'free', plan_expires_at: null, ai_usage_count: 0, created_at: nowStr(), last_login_at: nowStr() };
+      await this.db().doc('users/' + u.uid).set(profile);
+      await this.db().doc('userSettings/' + u.uid).set({ notify_orders: true, notify_subscription: true, notify_platform: true, notify_ai: true, public_stats: false, marketing: false }).catch(() => {});
+      await this.db().collection('notifications').add({ userId: u.uid, type: 'welcome', title: `أهلًا بك في PES AI PRO <span class="svg-icon">${I.party}</span>`, body: 'تم إنشاء حسابك بنجاح. ابدأ ببناء تشكيلتك أو حلّل فريقك.', link: '#/builder', is_read: false, created_at: nowStr() }).catch(() => {});
+      this._reg = null;
+      return { user: await this.publicUser(profile), plan: await this.planInfo(profile) };
+    } catch (err) {
+      return { error: fbErrMsg(err) };
+    }
   }
   async startLogin(data) {
-    const verifier = this.recaptcha();
-    const confirmation = await this.auth().signInWithPhoneNumber(data.phone, verifier);
-    this._login = { confirmation, name: data.name, phone: data.phone, pin: data.pin };
+    const r = await this._phoneStart(data.phone);
+    if (r.error) return { error: r.error };
+    this._login = { confirmation: r.confirmation, name: data.name, phone: data.phone, pin: data.pin };
     return { requires_otp: true, delivery: { delivered: true, channel: 'sms' }, message: 'أدخل رمز التحقق المرسل إلى هاتفك' };
   }
   async confirmLogin(code) {
-    if (!this._login) return { error: 'انتهت الجلسة، أعد المحاولة' };
-    const cred = await this._login.confirmation.confirm(code);
-    const u = cred.user, p = await this.doc('users/' + u.uid);
-    if (!p) { await this.auth().signOut(); return { error: 'لا يوجد ملف شخصي لهذا الرقم. أنشئ حسابًا جديدًا.' }; }
-    if (p.status === 'suspended') { await this.auth().signOut(); return { error: 'الحساب موقوف. تواصل مع الدعم.' }; }
-    if (String(p.name).trim().toLowerCase() !== String(this._login.name).trim().toLowerCase()) { await this.auth().signOut(); return { error: 'الاسم لا يطابق بيانات الحساب' }; }
-    if (p.pin_hash) {
-      if (!this._login.pin) { this._login.uid = u.uid; this._login.profile = p; return { requires_pin: true, name: p.name }; }
-      if (!(await this.verifyPin(this._login.pin, p.pin_hash, p.pin_salt))) { await this.auth().signOut(); return { error: 'الرمز السري غير صحيح' }; }
+    if (!this._login) return { error: 'انتهت جلسة التحقق، أعد المحاولة من البداية' };
+    let cred;
+    try { cred = await withTimeout(this._login.confirmation.confirm(code), 30000); }
+    catch (err) { return { error: fbErrMsg(err) }; }
+    try {
+      const u = cred.user, p = await withTimeout(this.doc('users/' + u.uid), 8000);
+      if (!p) { await this.auth().signOut(); return { error: 'لا يوجد ملف شخصي لهذا الرقم. أنشئ حسابًا جديدًا.' }; }
+      if (p.status === 'suspended') { await this.auth().signOut(); return { error: 'الحساب موقوف. تواصل مع الدعم.' }; }
+      /* الرقم موثّق بـ OTP بالفعل: اختلاف كتابة الاسم لا يجب أن يمنع الدخول */
+      if (p.pin_hash) {
+        if (!this._login.pin) { this._login.uid = u.uid; this._login.profile = p; return { requires_pin: true, name: p.name }; }
+        if (!(await this.verifyPin(this._login.pin, p.pin_hash, p.pin_salt))) { await this.auth().signOut(); return { error: 'الرمز السري غير صحيح' }; }
+      }
+      await this.db().doc('users/' + u.uid).update({ last_login_at: nowStr() }).catch(() => {});
+      this._login = null;
+      return { user: await this.publicUser(p), plan: await this.planInfo(p) };
+    } catch (err) {
+      return { error: fbErrMsg(err) };
     }
-    await this.db().doc('users/' + u.uid).update({ last_login_at: nowStr() });
-    this._login = null;
-    return { user: await this.publicUser(p), plan: await this.planInfo(p) };
   }
   async verifyLoginPin(pin) {
-    if (!this._login) return { error: 'انتهت الجلسة' };
+    if (!this._login || !this._login.profile) return { error: 'انتهت الجلسة، أعد المحاولة' };
     const p = this._login.profile;
+    if (!/^\d{4}$/.test(String(pin || ''))) return { error: 'الرمز السري 4 أرقام' };
     if (!(await this.verifyPin(pin, p.pin_hash, p.pin_salt))) { await this.auth().signOut(); return { error: 'الرمز السري غير صحيح' }; }
-    await this.db().doc('users/' + this._login.uid).update({ last_login_at: nowStr() });
+    try { await this.db().doc('users/' + this._login.uid).update({ last_login_at: nowStr() }); } catch (e) { }
     const res = { user: await this.publicUser(p), plan: await this.planInfo(p) };
     this._login = null; return res;
   }
-  async logout() { await this.auth().signOut(); }
+  async logout() { if (this.auth()) await this.auth().signOut(); }
   async loginWithGoogle() {
     try {
+      if (!SDK_OK) return { error: 'خدمات Firebase لم تُحمَّل. تحقق من الاتصال ثم حدّث الصفحة.' };
+      try { await this.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL); } catch (e) { }
       const provider = new firebase.auth.GoogleAuthProvider();
-      const cred = await this.auth().signInWithPopup(provider);
+      const cred = await withTimeout(this.auth().signInWithPopup(provider), 90000);
       const u = cred.user;
       const ref = this.db().doc('users/' + u.uid);
       let p = null;
@@ -370,7 +504,7 @@ class FirebaseBackend {
       localStorage.setItem('pesai_user', JSON.stringify(pub));
       return res;
     } catch (err) {
-      return { error: err.message || 'فشل تسجيل الدخول بواسطة Google' };
+      return { error: fbErrMsg(err) || 'فشل تسجيل الدخول بواسطة Google' };
     }
   }
   async updateProfile(d) {
@@ -519,9 +653,15 @@ class FirebaseBackend {
   async markAllNotifications() { const u = this.user(); const s = await this.db().collection('notifications').where('userId', '==', u.uid).where('is_read', '==', false).get(); const b = this.db().batch(); s.docs.forEach(d => b.update(d.ref, { is_read: true })); await b.commit(); return { message: 'تم' }; }
   async uploadImage(file) {
     const u = this.user(); if (!u) return { error: 'يجب تسجيل الدخول' };
-    const path = `uploads/${u.uid}/${Date.now()}-${file.name}`;
-    const s = await fb.storage().ref(path).put(file);
-    return { url: await s.ref.getDownloadURL() };
+    if (file && file.size > 4 * 1024 * 1024) return { error: 'حجم الصورة أكبر من 4MB — اضغطها أولًا.' };
+    try {
+      const path = `uploads/${u.uid}/${Date.now()}-${file.name}`;
+      const storage = await storageService();
+      const s = await withTimeout(storage.ref(path).put(file), 45000);
+      return { url: await s.ref.getDownloadURL() };
+    } catch (err) {
+      return { error: fbErrMsg(err) };
+    }
   }
   async analyzeImage() { return { needs_key: true, error: 'تحليل الصور بالذكاء الاصطناعي يحتاج دالة خادم (Firebase Function) مع مفتاح AI. يمكنك إدخال التشكيلة يدويًا والحصول على التحليل الكامل.' }; }
   async getReports() { const u = this.user(); if (!u) return { reports: [] }; const s = await this.db().collection('reports').where('userId', '==', u.uid).get(); return { reports: s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))).slice(0, 40) }; }
@@ -538,20 +678,26 @@ class FirebaseBackend {
     return { message: 'تم حذف الحساب' };
   }
   async recoverRequest(d) {
-    const verifier = this.recaptcha();
-    const confirmation = await this.auth().signInWithPhoneNumber(d.phone, verifier);
-    this._recover = { confirmation, phone: d.phone };
+    const r = await this._phoneStart(d.phone);
+    if (r.error) return { error: r.error };
+    this._recover = { confirmation: r.confirmation, phone: d.phone };
     return { requires_otp: true, delivery: { delivered: true, channel: 'sms' }, message: 'أدخل رمز التحقق' };
   }
   async recoverVerify(d) {
-    if (!this._recover) return { error: 'انتهت الجلسة' };
-    const cred = await this._recover.confirmation.confirm(d.otp);
-    const p = await this.doc('users/' + cred.user.uid);
-    if (!p) { await this.auth().signOut(); return { error: 'لا يوجد حساب بهذا الرقم' }; }
-    if (d.pin) { const pin = await this.makePin(d.pin); await this.db().doc('users/' + cred.user.uid).update({ pin_hash: pin.pin_hash, pin_salt: pin.pin_salt }); }
-    else await this.db().doc('users/' + cred.user.uid).update({ pin_hash: null, pin_salt: null });
-    this._recover = null;
-    return { user: await this.publicUser(p), plan: await this.planInfo(p), message: 'تمت استعادة الحساب' };
+    if (!this._recover) return { error: 'انتهت جلسة التحقق، أعد المحاولة من البداية' };
+    let cred;
+    try { cred = await withTimeout(this._recover.confirmation.confirm(d.otp), 30000); }
+    catch (err) { return { error: fbErrMsg(err) }; }
+    try {
+      const p = await withTimeout(this.doc('users/' + cred.user.uid), 8000);
+      if (!p) { await this.auth().signOut(); return { error: 'لا يوجد حساب بهذا الرقم' }; }
+      if (d.pin) { const pin = await this.makePin(d.pin); await this.db().doc('users/' + cred.user.uid).update({ pin_hash: pin.pin_hash, pin_salt: pin.pin_salt }); }
+      else await this.db().doc('users/' + cred.user.uid).update({ pin_hash: null, pin_salt: null });
+      this._recover = null;
+      return { user: await this.publicUser(p), plan: await this.planInfo(p), message: 'تمت استعادة الحساب' };
+    } catch (err) {
+      return { error: fbErrMsg(err) };
+    }
   }
   /* -------- admin -------- */
   async adminLogin(email, password) {
@@ -631,15 +777,18 @@ class FirebaseBackend {
 let Backend = new FirebaseBackend();
 function withTimeout(p, ms) { try { p.catch(() => {}); } catch (e) { } return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('TIMEOUT')), ms))]); }
 /* ------------------------------- state + routing ------------------------------- */
-const state = { user: null, plan: null, settings: {}, plans: [], products: [], formations: FORMATIONS, players: PLAYERS, teams: [], matches: [], orders: [], notifications: [], cart: JSON.parse(localStorage.getItem('pesai_cart') || '[]'), admin: null, route: 'home', params: {}, booted: false };
+const state = { user: null, plan: null, settings: {}, plans: [], products: [], formations: FORMATIONS, players: PLAYERS, teams: [], matches: [], orders: [], notifications: [], cart: JSON.parse(localStorage.getItem('pesai_cart') || '[]'), admin: null, route: 'home', params: {}, booted: false, authReady: false };
 const PROTECTED = ['analyzer', 'builder', 'assistant', 'matches', 'account', 'player'];
 const set = (k, v) => { state[k] = v; };
+let pendingRoute = null;
 function saveCart() { localStorage.setItem('pesai_cart', JSON.stringify(state.cart)); }
 function isPro() { return !!(state.user && state.user.plan === 'pro' && state.plan?.isPro); }
 function navigate(route) { if (location.hash === '#/' + route) { renderRoute(); } else { location.hash = '#/' + route; } }
 function goProtected(route) {
-  if (!state.user) { toast('سجّل الدخول أولًا للوصول إلى هذه الأداة', 'err'); navigate('auth?next=' + route); return; }
-  navigate(route);
+  if (state.user) { navigate(route); return; }
+  if (!state.authReady) { pendingRoute = route; toast('لحظة… جارٍ التحقق من جلستك'); renderRoute(); return; }
+  toast('سجّل الدخول أولًا للوصول إلى هذه الأداة', 'err');
+  navigate('auth?next=' + route);
 }
 function parseHash() {
   const raw = location.hash.replace(/^#\/?/, '') || 'home';
@@ -656,59 +805,137 @@ async function boot() {
   state.formations = FORMATIONS;
   state.players = PLAYERS;
 
-  const cachedUser = localStorage.getItem('pesai_user');
-  if (cachedUser) {
-    try { state.user = JSON.parse(cachedUser); state.plan = state.plans[0]; } catch(e) {}
-  }
+  /* 1) عرض فوري من الكاش المحلي — بدون انتظار أي طلب شبكة */
+  try {
+    const cachedBoot = JSON.parse(localStorage.getItem('pesai_boot') || 'null');
+    if (cachedBoot && (Date.now() - (cachedBoot.at || 0) < 6 * 3600e3)) {
+      if (cachedBoot.settings) state.settings = cachedBoot.settings;
+      if (cachedBoot.plans && cachedBoot.plans.length) state.plans = cachedBoot.plans;
+      if (cachedBoot.products && cachedBoot.products.length) state.products = cachedBoot.products;
+    }
+  } catch (e) { }
+  try {
+    const cachedUser = localStorage.getItem('pesai_user');
+    if (cachedUser) {
+      state.user = JSON.parse(cachedUser);
+      const cachedPlan = localStorage.getItem('pesai_plan');
+      if (cachedPlan) state.plan = JSON.parse(cachedPlan);
+    }
+  } catch (e) { }
 
-  renderShell();
   initSplash();
-  renderRoute();
-
-  const firebaseUser = await new Promise(resolve => {
-    const unsub = firebase.auth().onAuthStateChanged(user => {
-      unsub();
-      resolve(user);
-    }, () => resolve(null));
-    setTimeout(() => resolve(firebase.auth().currentUser), 1500);
-  });
-
-  if (firebaseUser) {
-    try {
-      const p = await Backend.doc('users/' + firebaseUser.uid);
-      if (p) {
-        state.user = await Backend.publicUser(p);
-        state.plan = await Backend.planInfo(p);
-        localStorage.setItem('pesai_user', JSON.stringify(state.user));
-      } else {
-        const newProfile = { id: firebaseUser.uid, name: firebaseUser.displayName || 'مستخدم', phone: firebaseUser.phoneNumber || '', email: firebaseUser.email || '', status: 'active', plan: 'free', created_at: nowStr(), last_login_at: nowStr() };
-        await Backend.db().doc('users/' + firebaseUser.uid).set(newProfile).catch(() => {});
-        state.user = await Backend.publicUser(newProfile);
-        state.plan = await Backend.planInfo(newProfile);
-        localStorage.setItem('pesai_user', JSON.stringify(state.user));
-      }
-    } catch (e) {}
-  } else {
-    state.user = null;
-    state.plan = null;
-    localStorage.removeItem('pesai_user');
-  }
-
   renderShell();
   renderRoute();
 
-  setTimeout(async () => {
+  if (!SDK_OK) {
+    state.authReady = true;
+    toast('تعذر تحميل خدمات Firebase (شبكة/حجب). تحقق من الاتصال ثم حدّث الصفحة', 'err');
+    renderRoute();
+    return;
+  }
+
+  /* 2) بالتوازي: بيانات المنصة + التحقق من الجلسة (بدل التسلسل البطيء) */
+  refreshPublicData();
+  watchAuth();
+
+  /* 3) صمّام أمان: لا نُبقي المستخدم على شاشة "جارٍ التحقق" أكثر من 9 ثوانٍ */
+  setTimeout(() => {
+    if (!state.authReady) { state.authReady = true; renderShell(); renderRoute(); }
+  }, 9000);
+}
+
+let _publicBusy = false;
+async function refreshPublicData() {
+  if (_publicBusy) return; _publicBusy = true;
+  try {
+    const data = await withTimeout(Backend.bootstrap(), 12000);
+    if (!data) return;
+    if (data.settings) state.settings = data.settings;
+    if (data.plans && data.plans.length) state.plans = data.plans;
+    if (data.products && data.products.length) state.products = data.products;
     try {
-      const data = await Backend.bootstrap();
-      if (data) {
-        state.settings = data.settings || state.settings;
-        state.plans = data.plans || state.plans;
-        state.products = data.products || state.products;
-        renderShell();
-        renderRoute();
+      localStorage.setItem('pesai_boot', JSON.stringify({ at: Date.now(), settings: state.settings, plans: state.plans, products: state.products }));
+    } catch (e) { }
+    renderShell();
+    safeRerenderView();
+  } catch (e) {
+    console.warn('bootstrap skipped:', e && e.message);
+  } finally { _publicBusy = false; }
+}
+
+/* إعادة رسم الصفحة الحالية بأمان — لا تمسح نموذجًا يكتب فيه المستخدم */
+function safeRerenderView() {
+  const el = document.activeElement;
+  if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
+  if (state.route === 'auth' || state.route === 'admin') return;
+  renderRoute();
+}
+
+let _authWatchStarted = false;
+function watchAuth() {
+  if (!SDK_OK || !fb.auth || _authWatchStarted) { state.authReady = true; return; }
+  _authWatchStarted = true;
+  let firstCallback = true;
+  fb.auth.onAuthStateChanged(async user => {
+    const prevId = state.user ? state.user.id : null;
+    /* مهم: أول نداء قد يكون null قبل أن يُكمل Firebase استرجاع الجلسة من الجهاز.
+       لا نُسجّل خروج المستخدم فورًا — ننتظر ونعيد التحقق. */
+    if (!user && firstCallback && state.user) {
+      firstCallback = false;
+      state.authReady = true;
+      renderShell();
+      const cur0 = parseHash().route;
+      if (cur0 !== 'auth') renderRoute();
+      setTimeout(() => {
+        if (fb.auth && !fb.auth.currentUser) {
+          state.user = null; state.plan = null; clearSession();
+          renderShell(); renderRoute();
+        }
+      }, 3500);
+      return;
+    }
+    firstCallback = false;
+    try {
+      if (user) {
+        if (!prevId || prevId !== user.uid) {
+          const p = await withTimeout(Backend.doc('users/' + user.uid), 8000).catch(() => null);
+          if (p) {
+            state.user = await Backend.publicUser(p);
+            state.plan = await Backend.planInfo(p);
+            persistSession();
+          } else if (!state.user && !Backend._reg) {
+            /* حساب Firebase بدون ملف شخصي (فشل إنشاء الملف سابقًا) — نُنشئه الآن بدون مسح بيانات موجودة */
+            const fallback = { id: user.uid, name: user.displayName || 'مستخدم', phone: user.phoneNumber || '', email: user.email || '', status: 'active', plan: 'free', created_at: nowStr(), last_login_at: nowStr() };
+            await withTimeout(Backend.db().doc('users/' + user.uid).set(fallback, { merge: true }), 8000).catch(() => { });
+            state.user = await Backend.publicUser(fallback);
+            state.plan = await Backend.planInfo(fallback);
+            persistSession();
+          }
+        } else {
+          /* نفس المستخدم: تحديث الباقة في الخلفية بدون تعطيل الواجهة */
+          Backend.doc('users/' + user.uid)
+            .then(p => p && Backend.planInfo(p).then(pl => { state.plan = pl; persistSession(); }).catch(() => { }))
+            .catch(() => { });
+        }
+      } else {
+        state.user = null; state.plan = null; clearSession();
       }
-    } catch(e) {}
-  }, 100);
+    } catch (e) {
+      console.warn('auth sync failed:', e && e.message);
+      /* لا نمسح الجلسة المحفوظة عند فشل الشبكة المؤقت */
+    } finally {
+      state.authReady = true;
+      renderShell();
+      const cur = parseHash().route;
+      if (cur !== 'auth') renderRoute();
+      else if (state.user) navigate('home');
+      if (state.user && pendingRoute) { const r = pendingRoute; pendingRoute = null; navigate(r); }
+    }
+  }, err => {
+    console.warn('auth listener error:', err && err.message);
+    state.authReady = true;
+    renderRoute();
+  });
 }
 function renderShell() {
   const bg = $('#bg-root');
@@ -720,7 +947,11 @@ function renderShell() {
     <div class="top-actions">
       ${u ? `<button class="icon-btn" id="bellBtn" aria-label="الإشعارات">${I.bell}<span class="badge-dot hidden" id="bellDot">0</span></button><a class="avatar" href="#/account" title="${esc(u.name)}">${esc((u.name || 'U')[0])}</a>` : `<a class="btn btn-gold btn-sm" href="#/auth">دخول / إنشاء حساب</a>`}
     </div></div></div>`;
-  if (u) loadBell();
+  if (u) {
+    loadBell();
+    const bell = $('#bellBtn');
+    if (bell) bell.onclick = () => navigate('account');
+  }
   const an = $('#announcement');
   if (an) an.innerHTML = s.announcement ? `<div class="announce">${I.spark}<span>${esc(s.announcement)}</span></div>` : '';
   const nav = $('#bottom-nav');
@@ -729,29 +960,50 @@ function renderShell() {
     nav.innerHTML = `<div class="bottom-nav"><div class="nav-in">${items.map(([r, label, ic]) => `<a class="nav-item ${state.route === r ? 'active' : ''}" href="#/${r}">${I[ic]}<span>${label}</span></a>`).join('')}</div></div>`;
   }
 }
-async function loadBell() {
-  const r = await Backend.getNotifications();
-  const dot = $('#bellDot');
-  if (dot) { dot.textContent = r.unread || 0; dot.classList.toggle('hidden', !r.unread); }
+let _bellAt = 0, _bellBusy = false;
+async function loadBell(force) {
+  if (!state.user || _bellBusy) return;
+  if (!force && Date.now() - _bellAt < 30000) return;   /* لا نكرر نفس الطلب مع كل رسم */
+  _bellBusy = true;
+  try {
+    const r = await withTimeout(Backend.getNotifications(), 8000);
+    _bellAt = Date.now();
+    const dot = $('#bellDot');
+    if (dot) { dot.textContent = r.unread || 0; dot.classList.toggle('hidden', !r.unread); }
+  } catch (e) { }
+  finally { _bellBusy = false; }
+}
+function renderSessionCheck() {
+  renderShell();
+  const app = $('#app');
+  if (!app) return;
+  app.innerHTML = `<div class="container section"><div class="card center-x" style="padding:34px">
+    <div class="spinner" style="width:30px;height:30px;margin:0 auto"></div>
+    <p class="muted small mt12" style="margin-top:14px">جارٍ التحقق من جلستك…</p></div></div>`;
 }
 function renderRoute() {
   const { route, params } = parseHash();
   state.route = route; state.params = params;
   if (route === 'admin') { renderAdmin(); return; }
-  if (PROTECTED.includes(route) && !state.user) { location.replace('#/auth?next=' + route); return; }
+  if (PROTECTED.includes(route) && !state.user) {
+    /* لا نطرد المستخدم لشاشة الدخول قبل التأكد من جلسته (كان يحدث عند كل تحديث) */
+    if (!state.authReady) { renderSessionCheck(); return; }
+    location.replace('#/auth?next=' + route); return;
+  }
   if (route === 'auth' && state.user) { location.replace('#/home'); return; }
   const views = { home: renderHome, auth: renderAuth, analyzer: renderAnalyzer, builder: renderBuilder, assistant: renderAssistant, store: renderStore, subscriptions: renderSubscriptions, matches: renderMatches, account: renderAccount, player: renderPlayer };
   const fn = views[route] || renderHome;
   renderShell();
   fn(params);
-  window.scrollTo({ top: 0, behavior: 'instant' });
+  try { window.scrollTo({ top: 0, behavior: 'instant' }); } catch (e) { }
 }
 function initSplash() {
   const s = $('#splash'); if (!s) return;
-  if (state.route !== 'home' || sessionStorage.getItem('pesai_splash') === '1') { s.remove(); return; }
-  const close = () => { sessionStorage.setItem('pesai_splash', '1'); s.classList.add('hide'); setTimeout(() => s.remove(), 700); };
+  if (parseHash().route !== 'home' || sessionStorage.getItem('pesai_splash') === '1') { s.remove(); return; }
+  const close = () => { sessionStorage.setItem('pesai_splash', '1'); s.classList.add('hide'); setTimeout(() => s.remove(), 600); };
   const skip = $('#skipIntro'); if (skip) skip.onclick = close;
-  setTimeout(close, 3000);
+  /* 3 ثوانٍ كانت تحجب المنصة بلا داعٍ — صارت ثانية واحدة */
+  setTimeout(close, 1000);
 }
 function socialsHtml() {
   const s = state.settings, wa = String(s.whatsappNumber || '').replace(/[^\d]/g, ''), tg = s.telegramUrl || '';
@@ -829,10 +1081,20 @@ function renderAuth(params) {
     </div>
     <p class="center-x small muted mt12">الدخول الإداري منفصل تمامًا ولا يظهر هنا. هذه الصفحة لحسابات المستخدمين فقط.</p>
   </div></div>${footerHtml()}`;
-  $('#googleLoginBtn').onclick = async () => {
-    const r = await Backend.loginWithGoogle();
-    if (r.error) return toast(r.error, 'err');
-    if (r.user) return authSuccess(r, next);
+  $('#googleLoginBtn').onclick = async e => {
+    const btn = e.currentTarget;
+    if (btn.disabled) return;
+    setBusy(btn, true, 'جارٍ فتح Google...');
+    try {
+      const r = await Backend.loginWithGoogle();
+      if (r.error) return toast(r.error, 'err');
+      if (r.user) return authSuccess(r, next);
+      toast('تعذر إكمال الدخول بـ Google', 'err');
+    } catch (err) {
+      toast(fbErrMsg(err), 'err');
+    } finally {
+      setBusy(btn, false);
+    }
   };
   $$('[data-authtab]').forEach(b => b.onclick = () => { $$('[data-authtab]').forEach(x => x.classList.toggle('active', x === b)); authFlow = null; renderAuthForm(b.dataset.authtab, next); });
   renderAuthForm('login', next);
@@ -840,15 +1102,15 @@ function renderAuth(params) {
 function renderAuthForm(tab, next) {
   const body = $('#authBody'); if (!body) return;
   if (tab === 'login') body.innerHTML = `<form id="loginForm">
-    <div class="field"><label>الاسم</label><input class="input" name="name" placeholder="اسمك كما سجلت" required></div>
-    <div class="field"><label>رقم الهاتف</label><input class="input" name="phone" placeholder="+201xxxxxxxxx" inputmode="tel" required></div>
-    <div class="field"><label>الرمز السري (4 أرقام — اختياري)</label><input class="input" name="pin" placeholder="اتركه فارغًا إذا لم يكن لديك رمز" inputmode="numeric" maxlength="4" pattern="[0-9]*"><div class="hint">بدون رمز سري يتم التحقق برمز OTP. لا نطلب كلمة مرور بريدك.</div></div>
+    <div class="field"><label>رقم الهاتف</label><input class="input" name="phone" type="tel" autocomplete="tel" placeholder="01012345678 أو +201012345678" inputmode="tel" required><div class="hint">يمكنك كتابة الرقم بالصيغة المصرية المحلية وسنحوّله تلقائيًا للصيغة الدولية.</div></div>
+    <div class="field"><label>الاسم (اختياري)</label><input class="input" name="name" placeholder="اسمك"></div>
+    <div class="field"><label>الرمز السري (4 أرقام — اختياري)</label><input class="input" name="pin" placeholder="اتركه فارغًا إذا لم يكن لديك رمز" inputmode="numeric" maxlength="4" pattern="[0-9]*"><div class="hint">الدخول يتم برمز تحقق SMS على هاتفك. جهازك يبقى مسجّلًا بعد أول دخول ناجح.</div></div>
     <div id="loginStep" class="hidden"></div>
     <div class="error-text" id="authError"></div>
     <button class="btn btn-gold btn-block" type="submit">دخول</button></form>`;
   if (tab === 'register') body.innerHTML = `<form id="registerForm">
     <div class="field"><label>الاسم</label><input class="input" name="name" minlength="3" required></div>
-    <div class="form-row"><div class="field"><label>رقم الهاتف</label><input class="input" name="phone" inputmode="tel" required></div><div class="field"><label>البريد الإلكتروني</label><input class="input" name="email" type="email" required></div></div>
+    <div class="form-row"><div class="field"><label>رقم الهاتف</label><input class="input" name="phone" type="tel" autocomplete="tel" placeholder="01012345678" inputmode="tel" required></div><div class="field"><label>البريد الإلكتروني</label><input class="input" name="email" type="email" autocomplete="email" required></div></div>
     <div class="field"><label>رمز سري اختياري (4 أرقام)</label><input class="input" name="pin" inputmode="numeric" maxlength="4" pattern="[0-9]*"><div class="hint">يمكنك إضافته أو تغييره لاحقًا من الإعدادات.</div></div>
     <label class="small muted" style="display:flex;gap:8px;align-items:flex-start"><input type="checkbox" name="terms" required style="margin-top:5px"> أوافق على الشروط، وأقر بأن المنصة لا تطلب بيانات دخول اللعبة.</label>
     <div id="registerStep" class="hidden"></div><div class="error-text" id="authError"></div><button class="btn btn-gold btn-block mt12" type="submit">إنشاء الحساب</button></form>`;
@@ -859,81 +1121,130 @@ function renderAuthForm(tab, next) {
     <div id="recoverStep" class="hidden"></div><div class="error-text" id="authError"></div><button class="btn btn-gold btn-block mt12" type="submit">استعادة الحساب</button></form>`;
   bindAuthForm(tab, next);
 }
-function authError(msg) { const e = $('#authError'); if (e) { e.textContent = msg; e.style.display = 'block'; } }
+function authError(msg) {
+  const e = $('#authError'); if (!e) return;
+  if (!msg) { e.textContent = ''; e.style.display = 'none'; return; }
+  e.textContent = msg; e.style.display = 'block';
+}
 function bindAuthForm(tab, next) {
   const form = $('#' + tab + 'Form'); if (!form) return;
+  const submitBtn = form.querySelector('button[type="submit"]');
   form.onsubmit = async e => {
     e.preventDefault();
-    const f = e.target, data = { name: f.elements.name.value.trim(), phone: f.elements.phone.value.trim(), pin: f.elements.pin.value.trim(), email: f.elements.email ? f.elements.email.value.trim() : '', otp: '' };
-    if (tab === 'register' && !f.elements.terms.checked) return authError('يجب الموافقة على الشروط');
-    if (tab === 'login') {
-      const r = await Backend.startLogin(data);
-      if (r.error) return authError(r.error);
-      if (r.requires_otp) { authFlow = { mode: 'login', data }; showOtpStep('loginStep', r, next); return; }
-      if (r.requires_pin) { authFlow = { mode: 'login-pin' }; showPinStep('loginStep', next); return; }
-      if (r.user) return authSuccess(r, next);
-      return authError('تعذر إكمال الدخول');
-    }
-    if (tab === 'register') {
-      const r = await Backend.startRegister(data);
-      if (r.error) return authError(r.error);
-      if (r.requires_otp) { authFlow = { mode: 'register', data }; showOtpStep('registerStep', r, next); return; }
-      if (r.user) return authSuccess(r, next);
-      return authError('تعذر إنشاء الحساب');
-    }
-    if (tab === 'recover') {
-      const r = await Backend.recoverRequest({ phone: data.phone });
-      if (r.error) return authError(r.error);
-      if (r.requires_otp) { authFlow = { mode: 'recover', data }; showOtpStep('recoverStep', r, next); return; }
-      return authError('تعذر إرسال رمز التحقق');
+    if (form.dataset.busy === '1') return;
+    const f = e.target;
+    const val = k => (f.elements[k] ? String(f.elements[k].value || '').trim() : '');
+    const data = { name: val('name'), phone: normalizePhone(val('phone')), pin: val('pin'), email: val('email') };
+    authError('');
+    if (tab !== 'recover' && data.phone.replace(/\D/g, '').length < 9) return authError('اكتب رقم هاتف صحيحًا — مثال: 01012345678 أو +201012345678');
+    if (tab === 'register' && f.elements.terms && !f.elements.terms.checked) return authError('يجب الموافقة على الشروط');
+    if (tab === 'register' && data.name.length < 3) return authError('الاسم يجب أن يكون 3 أحرف على الأقل');
+
+    form.dataset.busy = '1';
+    setBusy(submitBtn, true, tab === 'register' ? 'جارٍ إرسال رمز التحقق...' : 'جارٍ الاتصال...');
+    try {
+      if (tab === 'login') {
+        const r = await Backend.startLogin(data);
+        if (r.error) return authError(r.error);
+        if (r.requires_otp) { authFlow = { mode: 'login', data }; showOtpStep('loginStep', r, next); return; }
+        if (r.requires_pin) { authFlow = { mode: 'login-pin' }; showPinStep('loginStep', next); return; }
+        if (r.user) return authSuccess(r, next);
+        return authError('تعذر إكمال الدخول');
+      }
+      if (tab === 'register') {
+        const r = await Backend.startRegister(data);
+        if (r.error) return authError(r.error);
+        if (r.requires_otp) { authFlow = { mode: 'register', data }; showOtpStep('registerStep', r, next); return; }
+        if (r.user) return authSuccess(r, next);
+        return authError('تعذر إنشاء الحساب');
+      }
+      if (tab === 'recover') {
+        const r = await Backend.recoverRequest({ phone: data.phone });
+        if (r.error) return authError(r.error);
+        if (r.requires_otp) { authFlow = { mode: 'recover', data }; showOtpStep('recoverStep', r, next); return; }
+        return authError('تعذر إرسال رمز التحقق');
+      }
+    } catch (err) {
+      authError(fbErrMsg(err));
+    } finally {
+      form.dataset.busy = '0';
+      setBusy(submitBtn, false);
     }
   };
 }
 function showOtpStep(boxId, r, next) {
   const box = $('#' + boxId); if (!box) return;
   box.classList.remove('hidden');
-  box.innerHTML = `<div class="field"><label>رمز التحقق OTP</label><input class="input" id="otpInput" inputmode="numeric" maxlength="6" placeholder="6 أرقام"></div>
-    <div class="note info">${r.dev_code ? `رمز التحقق للتجربة: <b>${esc(r.dev_code)}</b>` : '📩 أدخل رمز التحقق المرسل إلى هاتفك.'}</div>
+  box.innerHTML = `<div class="field"><label>رمز التحقق OTP</label><input class="input" id="otpInput" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 أرقام"></div>
+    <div class="note info">${r.dev_code ? `رمز التحقق للتجربة: <b>${esc(r.dev_code)}</b>` : '📩 أدخل رمز التحقق المرسل إلى هاتفك (قد يتأخر حتى دقيقة).'}</div>
     <button class="btn btn-gold btn-block mt8" id="otpSubmit">تأكيد الرمز</button>`;
-  $('#otpInput').focus();
-  $('#otpSubmit').onclick = async () => {
-    const code = $('#otpInput').value.trim();
+  const inp = $('#otpInput'); if (inp) inp.focus();
+  const btn = $('#otpSubmit');
+  if (!btn) return;
+  btn.onclick = async () => {
+    if (btn.disabled) return;
+    const code = ($('#otpInput')?.value || '').trim();
     if (code.length < 4) return toast('أدخل رمز التحقق', 'err');
-    if (authFlow?.mode === 'register') {
-      const r = await Backend.confirmRegister(code);
-      if (r.error) return authError(r.error);
-      if (r.user) return authSuccess(r, next);
-    } else if (authFlow?.mode === 'recover') {
-      const r = await Backend.recoverVerify({ otp: code, pin: '' });
-      if (r.error) return authError(r.error);
-      if (r.user) return authSuccess(r, next);
-    } else {
-      const r = await Backend.confirmLogin(code);
-      if (r.error) return authError(r.error);
-      if (r.requires_pin) { authFlow = { mode: 'login-pin' }; showPinStep(boxId, next); return; }
-      if (r.user) return authSuccess(r, next);
+    authError('');
+    setBusy(btn, true, 'جارٍ التحقق...');
+    try {
+      if (authFlow?.mode === 'register') {
+        const r = await Backend.confirmRegister(code);
+        if (r.error) return authError(r.error);
+        if (r.user) return authSuccess(r, next);
+      } else if (authFlow?.mode === 'recover') {
+        const r = await Backend.recoverVerify({ otp: code, pin: '' });
+        if (r.error) return authError(r.error);
+        if (r.user) return authSuccess(r, next);
+      } else {
+        const r = await Backend.confirmLogin(code);
+        if (r.error) return authError(r.error);
+        if (r.requires_pin) { authFlow = { mode: 'login-pin' }; showPinStep(boxId, next); return; }
+        if (r.user) return authSuccess(r, next);
+      }
+      authError('تعذر إكمال التحقق');
+    } catch (err) {
+      authError(fbErrMsg(err));
+    } finally {
+      setBusy(btn, false);
     }
-    authError('تعذر إكمال التحقق');
   };
 }
 function showPinStep(boxId, next) {
   const box = $('#' + boxId); if (!box) return;
   box.classList.remove('hidden');
-  box.innerHTML = `<div class="field"><label>الرمز السري (4 أرقام)</label><input class="input" id="pinInput" inputmode="numeric" maxlength="4" placeholder="4 أرقام"></div><button class="btn btn-gold btn-block mt8" id="pinSubmit">تأكيد الرمز</button>`;
-  $('#pinInput').focus();
-  $('#pinSubmit').onclick = async () => {
-    const pin = $('#pinInput').value.trim();
-    const r = await Backend.verifyLoginPin(pin);
-    if (r.error) return authError(r.error);
-    if (r.user) return authSuccess(r, next);
-    authError('تعذر إكمال الدخول');
+  box.innerHTML = `<div class="field"><label>الرمز السري (4 أرقام)</label><input class="input" id="pinInput" inputmode="numeric" autocomplete="one-time-code" maxlength="4" placeholder="4 أرقام"></div><button class="btn btn-gold btn-block mt8" id="pinSubmit">تأكيد الرمز</button>`;
+  const inp = $('#pinInput'); if (inp) inp.focus();
+  const btn = $('#pinSubmit');
+  if (!btn) return;
+  btn.onclick = async () => {
+    if (btn.disabled) return;
+    const pin = ($('#pinInput')?.value || '').trim();
+    if (!/^\d{4}$/.test(pin)) return toast('الرمز السري 4 أرقام', 'err');
+    setBusy(btn, true, 'جارٍ التحقق...');
+    try {
+      const r = await Backend.verifyLoginPin(pin);
+      if (r.error) return authError(r.error);
+      if (r.user) return authSuccess(r, next);
+      authError('تعذر إكمال الدخول');
+    } catch (err) {
+      authError(fbErrMsg(err));
+    } finally {
+      setBusy(btn, false);
+    }
   };
 }
 function authSuccess(r, next) {
-  state.user = r.user; state.plan = r.plan;
+  state.user = r.user;
+  state.plan = r.plan || state.plans[0];
+  state.authReady = true;
+  persistSession();          /* كانت الجلسة تضيع عند أول تحديث للصفحة */
+  authFlow = null;
+  _bellAt = 0;
   toast('تم تسجيل الدخول بنجاح');
   renderShell();
-  navigate(next && next !== 'home' ? next : 'home');
+  const dest = next && next !== 'home' && next !== 'auth' ? next : 'home';
+  if (location.hash === '#/' + dest) renderRoute(); else navigate(dest);
 }
 /* ------------------------------- analyzer ------------------------------- */
 const an = { formation: '4-3-3', lineup: [], result: null };
@@ -1271,9 +1582,13 @@ async function acSaveProfile(e) { e.preventDefault(); const f = e.target; const 
 async function acSetPin() { const pin = ($('#acNewPin')?.value || '').trim(), current = ($('#acCurrentPin')?.value || '').trim(); if (!/^\d{4}$/.test(pin)) return toast('الرمز يجب أن يكون 4 أرقام', 'err'); const r = await Backend.setPin({ pin, current }); if (r.error) return toast(r.error, 'err'); toast('تم حفظ الرمز'); renderAccount(); }
 async function acRemovePin() { if (!confirm('إزالة الرمز السري؟')) return; const r = await Backend.removePin({ current: ($('#acCurrentPin')?.value || '').trim() }); if (r.error) return toast(r.error, 'err'); toast('تمت الإزالة'); renderAccount(); }
 async function acSaveSettings() { const body = {}; $$('[data-set]').forEach(cb => body[cb.dataset.set] = cb.checked); const r = await Backend.updateSettings(body); if (r.error) return toast(r.error, 'err'); toast('تم حفظ الإعدادات'); }
-async function acReadAll() { await Backend.markAllNotifications(); acLoadAll(); loadBell(); }
-async function acReadOne(id) { await Backend.markNotification(id); acLoadAll(); loadBell(); }
-async function aLogout() { await Backend.logout(); state.user = null; state.plan = null; state.cart = []; saveCart(); toast('تم تسجيل الخروج'); renderShell(); navigate('home'); }
+async function acReadAll() { await Backend.markAllNotifications(); acLoadAll(); loadBell(true); }
+async function acReadOne(id) { await Backend.markNotification(id); acLoadAll(); loadBell(true); }
+async function aLogout() {
+  try { await Backend.logout(); } catch (e) { }
+  state.user = null; state.plan = null; state.cart = []; saveCart(); clearSession();
+  _bellAt = 0; toast('تم تسجيل الخروج'); renderShell(); navigate('home');
+}
 function acDelete() {
   openModal('تأكيد حذف الحساب', `<div class="note warn mb12"><div>سيتم حذف جميع بياناتك نهائيًا. لا يمكن التراجع.</div></div><div class="field"><label>اكتب كلمة "حذف" للتأكيد</label><input class="input" id="acDelConfirm"></div><div class="field"><label>الرمز السري (للتأكيد)</label><input class="input" id="acDelOtp" inputmode="numeric" maxlength="6"></div><div class="note info" id="acDelInfo"></div><button class="btn btn-danger btn-block mt12" id="acDelBtn">حذف نهائي</button>`);
   let stage = 0;
@@ -1420,7 +1735,11 @@ function startApp() {
   const app = $('#app'); if (app && !app.dataset.ready) { app.dataset.ready = '1'; app.innerHTML = '<div class="container section"><div class="card"><div class="empty">جارٍ تحميل منصة PES AI PRO...</div></div></div>'; }
   boot().catch(e => { console.error('BOOT ERROR', e); toast('خطأ في تحميل الصفحة: ' + e.message, 'err'); });
 }
-window.addEventListener('unhandledrejection', e => console.error('UNHANDLED', e.reason));
+window.addEventListener('unhandledrejection', e => {
+  console.error('UNHANDLED', e.reason);
+  /* أي خطأ غير معالج يظهر للمستخدم برسالة عربية بدل صمت تام */
+  try { toast(fbErrMsg(e.reason || {}), 'err'); } catch (x) { }
+});
 document.addEventListener('DOMContentLoaded', startApp);
 if (document.readyState !== 'loading') startApp();
 
