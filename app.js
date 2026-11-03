@@ -23,6 +23,11 @@ const fb = { auth: null, db: null };
 if (SDK_OK) {
   try { fb.auth = firebase.auth(); } catch (e) { console.error('Auth init failed', e); }
   try { fb.db = firebase.firestore(); } catch (e) { console.error('Firestore init failed', e); }
+  /* كاش أوفلاين: يخلي البيانات المحفوظة تُقرأ حتى لو الشبكة وقعت، ويسرّع القراءات المتكررة */
+  if (fb.db && typeof fb.db.enablePersistence === 'function') {
+    fb.db.enablePersistence({ synchronizeTabs: true })
+      .catch(e => console.warn('Firestore offline cache disabled:', e && (e.code || e.message)));
+  }
 }
 /* firebase-storage (~150KB) لا يُحمَّل إلا عند رفع صورة — أسرع في التحميل الأول */
 let _storageSdkPromise = null;
@@ -104,6 +109,23 @@ function fbErrMsg(err) {
   for (const [k, msg] of table) if (code.includes(k)) return msg;
   const raw = (err && (err.message || err.code)) || 'حدث خطأ غير متوقع';
   return String(raw);
+}
+/* تقرير أخطاء قاعدة البيانات بدل السكوت التام (كانت كل الأخطاء تُبتلع وترجع null) */
+let _dbIssueAt = 0, _dbIssueKey = '';
+const DB_NET_CODES = /unavailable|network-request-failed|deadline-exceeded|internal|resource-exhausted|cancelled/i;
+function reportDbIssue(where, err) {
+  const code = String((err && (err.code || err.message)) || 'unknown');
+  console.warn('[firestore]', where, '→', code, (err && err.message) || '');
+  const key = code.split('/').pop();
+  if (key === _dbIssueKey && Date.now() - _dbIssueAt < 45000) return;   /* مانع تكرار نفس التنبيه */
+  _dbIssueKey = key; _dbIssueAt = Date.now();
+  try { state.dbIssue = key; } catch (e) { }
+  const msg = key === 'permission-denied'
+    ? 'ليس لديك صلاحية قراءة هذه البيانات (قواعد Firestore).'
+    : (key === 'unavailable' || key === 'network-request-failed')
+      ? 'تعذر الاتصال بقاعدة البيانات — تحقق من الإنترنت، وسنعيد المحاولة تلقائيًا.'
+      : fbErrMsg(err);
+  try { toast(msg, 'err'); } catch (e) { }
 }
 /* زر يتغيّر لشكل "جارٍ التنفيذ" ويمنع الضغط المزدوج */
 function setBusy(btn, busy, label) {
@@ -314,19 +336,28 @@ class FirebaseBackend {
   db() { return fb.db; }
   auth() { return fb.auth; }
   user() { return this.auth() ? this.auth().currentUser : null; }
-  async doc(path) {
+  async doc(path, retried) {
+    if (!this.db()) return null;
     try {
       const s = await this.db().doc(path).get();
       return s.exists ? { id: s.id, ...s.data() } : null;
     } catch (e) {
+      const code = String((e && (e.code || e.message)) || '');
+      /* عطل شبكة مؤقت: محاولة ثانية واحدة قبل إبلاغ المستخدم */
+      if (!retried && DB_NET_CODES.test(code)) { await sleep(1200); return this.doc(path, true); }
+      reportDbIssue('doc:' + path, e);
       return null;
     }
   }
-  async docs(path) {
+  async docs(path, retried) {
+    if (!this.db()) return [];
     try {
       const s = await this.db().collection(path).get();
       return s.docs.map(d => ({ id: d.id, ...d.data() }));
     } catch (e) {
+      const code = String((e && (e.code || e.message)) || '');
+      if (!retried && DB_NET_CODES.test(code)) { await sleep(1200); return this.docs(path, true); }
+      reportDbIssue('col:' + path, e);
       return [];
     }
   }
@@ -1532,6 +1563,18 @@ document.addEventListener('click', e => {
   if (need) { toast('سيتم تفعيل هذا الزر بعد ضبط بيانات التواصل', 'err'); }
 });
 window.addEventListener('hashchange', () => { renderRoute(); });
+window.addEventListener('offline', () => toast('انقطع الاتصال بالإنترنت — المنصة هتعرض بياناتك المحفوظة', 'err'));
+window.addEventListener('online', () => {
+  toast('رجع الاتصال — جارٍ تحديث البيانات');
+  _dbIssueKey = ''; _dbIssueAt = 0;
+  try { refreshPublicData(); } catch (e) { }
+  if (state.user) {
+    loadBell(true);
+    Backend.doc('users/' + state.user.id)
+      .then(p => p && Backend.planInfo(p).then(pl => { state.plan = pl; persistSession(); renderShell(); }).catch(() => { }))
+      .catch(() => { });
+  }
+});
 function startApp() {
   const app = $('#app'); if (app && !app.dataset.ready) { app.dataset.ready = '1'; app.innerHTML = '<div class="container section"><div class="card"><div class="empty">جارٍ تحميل منصة PES AI PRO...</div></div></div>'; }
   boot().catch(e => { console.error('BOOT ERROR', e); toast('خطأ في تحميل الصفحة: ' + e.message, 'err'); });
