@@ -228,14 +228,7 @@ tr:hover td{background:rgba(255,255,255,.025)}
 .social-btn:active{transform:scale(.94)}
 .social-btn svg{width:22px;height:22px}
 
-/* admin */
-.admin-shell{display:grid;grid-template-columns:230px 1fr;gap:18px;padding-top:18px}
-.side-nav{position:sticky;top:80px;align-self:start;display:flex;flex-direction:column;gap:4px;background:var(--glass);border:1px solid rgba(255,255,255,.07);border-radius:18px;padding:12px}
-.side-nav button{display:flex;align-items:center;gap:9px;padding:10px 11px;border-radius:10px;font-size:13px;color:#b9b9b9;text-align:right;transition:.2s}
-.side-nav button.active{background:rgba(212,175,55,.13);color:var(--gold-light);border:1px solid rgba(212,175,55,.25)}
-.side-nav button:hover{background:rgba(255,255,255,.04)}
-.admin-view{display:none}
-.admin-view.active{display:block;animation:fadeUp .25s ease both}
+/* key-value rows */
 .kv{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px dashed rgba(255,255,255,.08);font-size:13px}
 .kv b{color:var(--gold-light)}
 
@@ -256,9 +249,6 @@ tr:hover td{background:rgba(255,255,255,.025)}
   .hero-grid{grid-template-columns:1fr}
   .hero-art{order:-1;min-height:200px}
   .hero-art img{min-height:200px}
-  .admin-shell{grid-template-columns:1fr}
-  .side-nav{position:static;flex-direction:row;overflow-x:auto}
-  .side-nav button{white-space:nowrap;font-size:12px;padding:8px 10px}
   .form-row{grid-template-columns:1fr}
   .topbar-in{height:58px}
   .brand small{display:none}

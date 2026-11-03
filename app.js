@@ -699,85 +699,11 @@ class FirebaseBackend {
       return { error: fbErrMsg(err) };
     }
   }
-  /* -------- admin -------- */
-  async adminLogin(email, password) {
-    const cred = await this.auth().signInWithEmailAndPassword(email, password);
-    const a = await this.doc('admins/' + cred.user.uid);
-    if (!a || !a.isAdmin) { await this.auth().signOut(); return { error: 'هذا الحساب لا يملك صلاحية إدارة' }; }
-    this._admin = { uid: cred.user.uid, name: a.name || 'Admin', email: a.email || email };
-    return { requires_code: true, admin: this._admin, message: 'أدخل رمز الدخول الإداري' };
-  }
-  async adminVerify(code) {
-    if (!this._admin) return { error: 'انتهت الجلسة' };
-    const s = await this.doc('settings/adminAccessCode');
-    const stored = s?.hash || '';
-    if (!stored) { sessionStorage.setItem('pesai_admin', this._admin.uid); return { admin: this._admin, setup: true, message: 'تم الدخول — عيّن رمز الدخول الإداري من الإعدادات' }; }
-    const hash = await this.hashPin(code, s?.salt || 'pesai-admin');
-    if (hash !== stored) return { error: 'رمز الدخول الإداري غير صحيح' };
-    sessionStorage.setItem('pesai_admin', this._admin.uid);
-    return { admin: this._admin, message: 'تم دخول لوحة التحكم' };
-  }
-  async adminMe() { const u = this.user(); if (!u) return { admin: null }; const a = await this.doc('admins/' + u.uid); if (!a || !a.isAdmin) return { admin: null }; return { admin: { id: u.uid, name: a.name, email: a.email, role: a.role || 'superadmin' } }; }
-  async requireAdmin() { const me = await this.adminMe(); if (!me.admin) throw new Error('دخول الإدارة مطلوب'); return me.admin; }
-  async adminStats() {
-    await this.requireAdmin();
-    const [users, orders, products, plans, reports, teams, matches] = await Promise.all([this.docs('users'), this.docs('orders'), this.docs('products'), this.docs('plans'), this.docs('reports'), this.docs('teams'), this.docs('matches')]);
-    const now = new Date();
-    return { stats: { users: users.length, activeUsers: users.filter(u => u.status === 'active').length, proUsers: users.filter(u => u.plan === 'pro' && u.plan_expires_at && new Date(u.plan_expires_at.replace(' ', 'T')) > now).length, newUsers: users.filter(u => String(u.created_at || '').slice(0, 10) >= new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)).length, orders: orders.length, pending: orders.filter(o => o.status === 'pending_review').length, revenue: orders.filter(o => o.status === 'completed').reduce((a, o) => a + (o.total || 0), 0), products: products.filter(p => p.isActive !== false).length, reports: reports.length, teams: teams.length, matches: matches.length }, recentUsers: users.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))).slice(0, 6), recentOrders: orders.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))).slice(0, 6).map(o => ({ ...o, user_name: users.find(u => u.id === o.userId)?.name })), byEngine: [...new Set(reports.map(r => r.engine))].map(e => ({ engine: e, c: reports.filter(r => r.engine === e).length })), daily: [] };
-  }
-  async adminUsers() { await this.requireAdmin(); const [users, teams, orders] = await Promise.all([this.docs('users'), this.docs('teams'), this.docs('orders')]); return { users: users.map(u => ({ ...u, plan_expires_at: u.plan_expires_at, teams_count: teams.filter(t => t.userId === u.id).length, orders_count: orders.filter(o => o.userId === u.id).length })).sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))) }; }
-  async adminUserUpdate(id, d) {
-    await this.requireAdmin();
-    if (d.status) await this.db().doc('users/' + id).update({ status: d.status });
-    if (d.plan) {
-      if (d.plan === 'pro') { const base = new Date(); await this.db().doc('users/' + id).update({ plan: 'pro', plan_expires_at: addDays(d.extend_days || 30) }); await this.db().collection('notifications').add({ userId: id, type: 'subscription', title: 'تم تفعيل باقة PRO', body: 'أصبح لديك وصول كامل.', link: '#/subscriptions', is_read: false, created_at: nowStr() }); }
-      else await this.db().doc('users/' + id).update({ plan: 'free', plan_expires_at: null });
-    }
-    return { message: 'تم التحديث' };
-  }
-  async adminPlans() { await this.requireAdmin(); return { plans: await this.docs('plans') }; }
-  async adminPlanSave(id, d) { await this.requireAdmin(); if (id) await this.db().doc('plans/' + id).set(d, { merge: true }); else await this.db().collection('plans').add(d); return { message: 'تم الحفظ' }; }
-  async adminPlanDelete(id) { await this.requireAdmin(); await this.db().doc('plans/' + id).update({ isActive: false }); return { message: 'تم الإيقاف' }; }
-  async adminProducts() { await this.requireAdmin(); return { products: await this.docs('products') }; }
-  async adminProductSave(id, d) { await this.requireAdmin(); if (id) await this.db().doc('products/' + id).set(d, { merge: true }); else await this.db().collection('products').add(d); return { message: 'تم الحفظ' }; }
-  async adminProductDelete(id) { await this.requireAdmin(); await this.db().doc('products/' + id).update({ isActive: false }); return { message: 'تم الإخفاء' }; }
-  async adminOrders() { await this.requireAdmin(); const [orders, users, products, plans] = await Promise.all([this.docs('orders'), this.docs('users'), this.docs('products'), this.docs('plans')]); return { orders: orders.map(o => ({ ...o, user_name: users.find(u => u.id === o.userId)?.name, user_phone: users.find(u => u.id === o.userId)?.phone, product_name: products.find(p => p.id === o.product_id)?.name, plan_name: plans.find(p => p.id === o.plan_id)?.name })).sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))) }; }
-  async adminOrderAction(id, action, note) {
-    await this.requireAdmin();
-    const o = await this.doc('orders/' + id); if (!o) return { error: 'الطلب غير موجود' };
-    const status = action === 'approve' ? 'completed' : 'rejected';
-    await this.db().doc('orders/' + id).update({ status, admin_note: note || '', updated_at: nowStr() });
-    if (action === 'approve' && o.type === 'subscription' && o.plan_id) {
-      const plan = await this.doc('plans/' + o.plan_id);
-      if (plan) { await this.db().doc('users/' + o.userId).update({ plan: 'pro', plan_expires_at: addDays(plan.durationDays || 30) }); await this.db().collection('notifications').add({ userId: o.userId, type: 'subscription', title: `تم تفعيل اشتراك PRO <span class="svg-icon">${I.party}</span>`, body: 'تم تأكيد الدفع للطلب #' + id, link: '#/subscriptions', is_read: false, created_at: nowStr() }); }
-    } else {
-      await this.db().collection('notifications').add({ userId: o.userId, type: 'order', title: action === 'approve' ? 'تم تأكيد طلبك' : 'تم رفض الطلب', body: 'الطلب #' + id + (note ? ' — ' + note : ''), link: '#/account', is_read: false, created_at: nowStr() });
-    }
-    return { message: 'تم التحديث' };
-  }
-  async adminBroadcast(d) {
-    await this.requireAdmin();
-    const users = d.audience === 'all' ? await this.docs('users') : (await this.docs('users')).filter(u => d.audience === 'pro' ? u.plan === 'pro' : u.plan === 'free');
-    const b = this.db().batch();
-    users.forEach(u => { const r = this.db().collection('notifications').doc(); b.set(r, { userId: u.id, type: 'admin', title: d.title, body: d.body || '', link: d.link || '', is_read: false, created_at: nowStr() }); });
-    await b.commit();
-    return { sent: users.length, message: 'تم الإرسال إلى ' + users.length };
-  }
-  async adminSettings() { await this.requireAdmin(); const s = await this.settings(); return { settings: this.normSettings(s), ai: { enabled: !!s.aiEnabled, model: s.aiModel || 'gpt-4o-mini', key_env: 'FIREBASE_CONFIG' } }; }
-  async adminSettingsSave(d) {
-    await this.requireAdmin();
-    const payload = { platformName: d.platform_name, tagline: d.tagline, whatsappNumber: d.whatsapp_number, telegramUrl: d.telegram_url, supportEmail: d.support_email, announcement: d.announcement, paymentsNote: d.payments_note, instapayHandle: d.instapay_handle, vodafoneCash: d.vodafone_cash, aiModel: d.ai_model };
-    await this.db().doc('settings/public').set(payload, { merge: true });
-    if (d.admin_access_code) { const salt = uid(); const hash = await this.hashPin(d.admin_access_code, salt); await this.db().doc('settings/adminAccessCode').set({ hash, salt }); }
-    return { message: 'تم حفظ الإعدادات' };
-  }
-  async adminAudit() { await this.requireAdmin(); const s = await this.docs('audit'); return { logs: s.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))).slice(0, 150) }; }
-  async adminAi() { await this.requireAdmin(); const reports = await this.docs('reports'); const users = await this.docs('users'); return { total: reports.length, byKind: [...new Set(reports.map(r => r.kind))].map(k => ({ kind: k, c: reports.filter(r => r.kind === k).length })), byEngine: [...new Set(reports.map(r => r.engine))].map(e => ({ engine: e, c: reports.filter(r => r.engine === e).length })), daily: [], topUsers: users.map(u => ({ id: u.id, name: u.name, plan: u.plan, c: reports.filter(r => r.userId === u.id).length })).sort((a, b) => b.c - a.c).slice(0, 10) }; }
 }
 let Backend = new FirebaseBackend();
 function withTimeout(p, ms) { try { p.catch(() => {}); } catch (e) { } return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('TIMEOUT')), ms))]); }
 /* ------------------------------- state + routing ------------------------------- */
-const state = { user: null, plan: null, settings: {}, plans: [], products: [], formations: FORMATIONS, players: PLAYERS, teams: [], matches: [], orders: [], notifications: [], cart: JSON.parse(localStorage.getItem('pesai_cart') || '[]'), admin: null, route: 'home', params: {}, booted: false, authReady: false };
+const state = { user: null, plan: null, settings: {}, plans: [], products: [], formations: FORMATIONS, players: PLAYERS, teams: [], matches: [], orders: [], notifications: [], cart: JSON.parse(localStorage.getItem('pesai_cart') || '[]'), route: 'home', params: {}, booted: false, authReady: false };
 const PROTECTED = ['analyzer', 'builder', 'assistant', 'matches', 'account', 'player'];
 const set = (k, v) => { state[k] = v; };
 let pendingRoute = null;
@@ -867,7 +793,7 @@ async function refreshPublicData() {
 function safeRerenderView() {
   const el = document.activeElement;
   if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
-  if (state.route === 'auth' || state.route === 'admin') return;
+  if (state.route === 'auth') return;
   renderRoute();
 }
 
@@ -984,7 +910,6 @@ function renderSessionCheck() {
 function renderRoute() {
   const { route, params } = parseHash();
   state.route = route; state.params = params;
-  if (route === 'admin') { renderAdmin(); return; }
   if (PROTECTED.includes(route) && !state.user) {
     /* لا نطرد المستخدم لشاشة الدخول قبل التأكد من جلسته (كان يحدث عند كل تحديث) */
     if (!state.authReady) { renderSessionCheck(); return; }
@@ -1008,8 +933,8 @@ function initSplash() {
 function socialsHtml() {
   const s = state.settings, wa = String(s.whatsappNumber || '').replace(/[^\d]/g, ''), tg = s.telegramUrl || '';
   return `<div class="socials">
-    ${wa ? `<a class="social-btn" href="https://wa.me/${wa}" target="_blank" rel="noopener" aria-label="WhatsApp">${I.whatsapp}</a>` : `<button class="social-btn" data-need="whatsapp" aria-label="WhatsApp" title="يُضبط رقم واتساب من لوحة الإدارة">${I.whatsapp}</button>`}
-    ${tg && !tg.includes('t.me/') || (tg && tg !== 'https://t.me/') ? `<a class="social-btn" href="${esc(tg)}" target="_blank" rel="noopener" aria-label="Telegram">${I.telegram}</a>` : `<button class="social-btn" data-need="telegram" aria-label="Telegram" title="يُضبط رابط تليجرام من لوحة الإدارة">${I.telegram}</button>`}
+    ${wa ? `<a class="social-btn" href="https://wa.me/${wa}" target="_blank" rel="noopener" aria-label="WhatsApp">${I.whatsapp}</a>` : `<button class="social-btn" data-need="whatsapp" aria-label="WhatsApp" title="لم يُضبط رقم واتساب بعد">${I.whatsapp}</button>`}
+    ${tg && !tg.includes('t.me/') || (tg && tg !== 'https://t.me/') ? `<a class="social-btn" href="${esc(tg)}" target="_blank" rel="noopener" aria-label="Telegram">${I.telegram}</a>` : `<button class="social-btn" data-need="telegram" aria-label="Telegram" title="لم يُضبط رابط تليجرام بعد">${I.telegram}</button>`}
   </div>`;
 }
 function footerHtml() {
@@ -1063,7 +988,7 @@ function renderHome() {
   <section class="section container"><div class="section-head"><div><h2 class="section-title">من <span>المتجر</span></h2><p class="section-sub">خدمات رقمية يضيفها فريق PES AI PRO.</p></div><a class="btn btn-ghost btn-sm" href="#/store">المتجر كامل</a></div><div class="grid cards">${state.products.slice(0, 3).map(productCard).join('')}</div></section>
   <section class="container"><div class="card pulse center-x" style="padding:28px"><h2 class="section-title">جاهز ترتقي بمستوى فريقك؟</h2><p class="muted small mt8">انضم إلى PES AI PRO وابدأ بتحليل فريقك خلال دقيقة — بدون أي بيانات دخول إلى اللعبة.</p><div class="hero-cta" style="justify-content:center">${u ? `<button class="btn btn-gold" onclick="goProtected('analyzer')">ابدأ التحليل</button>` : `<button class="btn btn-gold" onclick="navigate('auth')">إنشاء حساب الآن</button>`}<a class="btn btn-ghost" href="#/store">تصفح الخدمات</a></div></div></section>
   ${footerHtml()}`;
-  $$('[data-need]').forEach(b => b.onclick = () => toast('سيتم تفعيل هذا الزر بعد ضبط بيانات التواصل من لوحة الإدارة', 'err'));
+  $$('[data-need]').forEach(b => b.onclick = () => toast('سيتم تفعيل هذا الزر بعد ضبط بيانات التواصل', 'err'));
 }
 
 /* ------------------------------- auth ------------------------------- */
@@ -1079,7 +1004,7 @@ function renderAuth(params) {
       <div id="authBody"></div>
       <div id="recaptcha-container" style="position:fixed;bottom:0;left:0;width:1px;height:1px;overflow:hidden"></div>
     </div>
-    <p class="center-x small muted mt12">الدخول الإداري منفصل تمامًا ولا يظهر هنا. هذه الصفحة لحسابات المستخدمين فقط.</p>
+    <p class="center-x small muted mt12">هذه الصفحة لحسابات المستخدمين فقط — حساب واحد لكل الأدوات.</p>
   </div></div>${footerHtml()}`;
   $('#googleLoginBtn').onclick = async e => {
     const btn = e.currentTarget;
@@ -1601,134 +1526,10 @@ function acDelete() {
     toast('تم حذف الحساب'); state.user = null; state.plan = null; renderShell(); navigate('home');
   };
 }
-/* ------------------------------- admin (separate route) ------------------------------- */
-let adminView = 'overview', adminPending = null, adminPlansCache = [], adminProductsCache = [];
-function adminShell(title, body) {
-  $('#bg-root').innerHTML = `<div class="bg-layer"><img src="images/bg-stadium.jpg" alt=""></div><div class="orb g1"></div><div class="orb g2"></div>`;
-  $('#topbar').innerHTML = `<div class="topbar"><div class="container topbar-in"><a class="brand" href="#/home"><img src="images/icon.png" alt="PES AI PRO"><div>PES AI PRO<small>ADMIN CONTROL</small></div></a><div class="top-actions"><span class="pill">منطقة الإدارة</span><a class="btn btn-ghost btn-sm" href="#/home">موقع المستخدمين</a>${state.admin ? `<button class="btn btn-danger btn-sm" onclick="adminLogout()">خروج</button>` : ''}</div></div></div>`;
-  $('#announcement').innerHTML = ''; $('#bottom-nav').innerHTML = ''; $('#app').innerHTML = body;
-}
-async function renderAdmin() {
-  adminShell('admin', `<div class="container section"><div class="form-wrap"><div class="center-x mb16"><img src="images/icon.png" alt="PES AI PRO" style="width:70px;height:70px;border-radius:18px;margin:0 auto 10px;border:1px solid rgba(212,175,55,.4)"><h1 class="section-title">لوحة تحكم <span>PES AI PRO</span></h1><p class="muted small">دخول منفصل تمامًا عن حسابات المستخدمين — يتطلب كلمة مرور + رمز تحقق.</p></div><div class="card" id="adminLoginCard"></div><div class="note mt12"><div>هذه الصفحة غير مرتبطة بحسابات المستخدمين. رابطها المباشر <b>#/admin</b> فقط، ولا يظهر في واجهة الموقع العامة.</div></div></div></div>`);
-  const r = await withTimeout(Backend.adminMe(), 3500).catch(() => ({ admin: null }));
-  if (r.admin) { state.admin = r.admin; renderAdminDash(); return; }
-  renderAdminLogin();
-}
-function renderAdminLogin() {
-  const card = $('#adminLoginCard'); if (!card) return;
-  card.innerHTML = `<form id="adminLoginForm" onsubmit="adminLoginSubmit(event)"><div class="field"><label>البريد الإداري</label><input class="input" name="email" type="email" required autocomplete="username"></div><div class="field"><label>كلمة المرور</label><input class="input" name="password" type="password" required autocomplete="current-password"></div><div id="adminCodeStep" class="hidden"><div class="field"><label>رمز الدخول الإداري</label><input class="input" name="code" inputmode="numeric" maxlength="6" placeholder="6 أرقام"></div><div class="note info" id="adminCodeInfo"></div></div><div class="error-text" id="adminError"></div><button class="btn btn-gold btn-block" type="submit">دخول لوحة التحكم</button></form>`;
-}
-async function adminLoginSubmit(e) {
-  e.preventDefault(); const f = e.target; const err = $('#adminError'); if (err) err.style.display = 'none';
-  const email = f.elements.email.value.trim(), password = f.elements.password.value, code = (f.elements.code?.value || '').trim();
-  if (!adminPending) {
-    const r = await withTimeout(Backend.adminLogin(email, password), 8000).catch(() => ({ error: 'تعذر الاتصال بخادم الدخول' }));
-    if (r.error) { if (err) { err.textContent = r.error; err.style.display = 'block'; } return; }
-    if (r.requires_otp || r.requires_code) {
-      adminPending = { email };
-      $('#adminCodeStep').classList.remove('hidden'); f.elements.code?.focus();
-      const info = $('#adminCodeInfo'); if (info) info.innerHTML = r.dev_code ? `رمز التحقق للتجربة: <b>${esc(r.dev_code)}</b>` : '📩 أدخل رمز التحقق المرسل إلى هاتف الأدمن.';
-      return;
-    }
-    if (r.admin) { state.admin = r.admin; renderAdminDash(); return; }
-  }
-  const r = await withTimeout(Backend.adminVerify(code), 8000).catch(() => ({ error: 'تعذر الاتصال بخادم التحقق' }));
-  if (r.error) { if (err) { err.textContent = r.error; err.style.display = 'block'; } return; }
-  state.admin = r.admin; adminPending = null; if (r.setup) toast('تم الدخول — عيّن رمز الدخول الإداري من الإعدادات', 'err'); renderAdminDash();
-}
-function renderAdminDash() {
-  adminShell('admin', `<div class="section-head" style="padding-top:16px"><div><h1 class="section-title">لوحة <span>التحكم</span></h1><p class="section-sub" id="adminWho"></p></div><div class="flex gap"><a class="btn btn-ghost btn-sm" href="#/home">عرض الموقع</a><button class="btn btn-danger btn-sm" onclick="adminLogout()">خروج</button></div></div>
-    <div class="admin-shell"><div class="side-nav" id="adminSide">${[['overview','<span class="svg-icon">' + I.chart + '</span> نظرة عامة'],['users','<span class="svg-icon">' + I.users + '</span> المستخدمون'],['plans','<span class="svg-icon">' + I.card + '</span> الباقات'],['products','<span class="svg-icon">' + I.store + '</span> الخدمات'],['orders','<span class="svg-icon">' + I.receipt + '</span> الطلبات'],['notify','<span class="svg-icon">' + I.bell + '</span> الإشعارات'],['settings','<span class="svg-icon">' + I.settings + '</span> الإعدادات'],['audit','<span class="svg-icon">' + I.memo + '</span> سجل العمليات'],['ai','<span class="svg-icon">' + I.robot + '</span> تقارير AI']].map(([v, l]) => `<button class="${v === adminView ? 'active' : ''}" data-aview="${v}">${l}</button>`).join('')}</div><div id="adminMain"></div></div>`);
-  $('#adminWho').innerHTML = `مرحبًا ${esc(state.admin.name)} — <span class="gold">${esc(state.admin.email)}</span>`;
-  $$('[data-aview]').forEach(b => b.onclick = () => { adminView = b.dataset.aview; $$('[data-aview]').forEach(x => x.classList.toggle('active', x === b)); adminLoadView(); });
-  adminLoadView();
-}
-function adminLoadView() {
-  const main = $('#adminMain'); if (!main) return;
-  main.innerHTML = '<div class="card"><div class="empty">جارٍ التحميل...</div></div>';
-  const loaders = { overview: adminOverview, users: adminUsersView, plans: adminPlansView, products: adminProductsView, orders: adminOrdersView, notify: adminNotifyView, settings: adminSettingsView, audit: adminAuditView, ai: adminAiView };
-  (loaders[adminView] || adminOverview)();
-}
-async function adminOverview() {
-  const r = await Backend.adminStats(); if (r.error) return toast(r.error, 'err'); const s = r.stats || {};
-  $('#adminMain').innerHTML = `<div class="grid cards mb16"><div class="card"><div class="card-title" style="margin:0">المستخدمون</div><div class="price" style="font-size:28px">${s.users || 0}</div><div class="small muted">نشط: ${s.activeUsers || 0} · PRO: ${s.proUsers || 0} · جديد: ${s.newUsers || 0}</div></div><div class="card"><div class="card-title" style="margin:0">الطلبات</div><div class="price" style="font-size:28px">${s.orders || 0}</div><div class="small muted">قيد المراجعة: ${s.pending || 0}</div></div><div class="card"><div class="card-title" style="margin:0">الإيرادات المؤكدة</div><div class="price" style="font-size:28px">${money(s.revenue || 0)}</div><div class="small muted">طلبات مكتملة فقط</div></div><div class="card"><div class="card-title" style="margin:0">تقارير AI</div><div class="price" style="font-size:28px">${s.reports || 0}</div><div class="small muted">تشكيلات: ${s.teams || 0} · مباريات: ${s.matches || 0}</div></div></div>
-    <div class="grid two"><div class="card"><h3 class="card-title" style="margin-top:0">أحدث المستخدمين</h3><div class="table-wrap"><table><thead><tr><th>الاسم</th><th>الهاتف</th><th>الباقة</th><th>الحالة</th></tr></thead><tbody>${(r.recentUsers || []).map(u => `<tr><td>${esc(u.name)}</td><td>${esc(u.phone)}</td><td>${esc(u.plan)}</td><td>${statusPill(u.status)}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">لا يوجد</td></tr>'}</tbody></table></div></div><div class="card"><h3 class="card-title" style="margin-top:0">أحدث الطلبات</h3><div class="table-wrap"><table><thead><tr><th>#</th><th>المستخدم</th><th>الإجمالي</th><th>الحالة</th></tr></thead><tbody>${(r.recentOrders || []).map(o => `<tr><td>${o.id}</td><td>${esc(o.user_name || '—')}</td><td>${money(o.total)}</td><td>${statusPill(o.status)}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">لا يوجد</td></tr>'}</tbody></table></div></div></div>`;
-}
-async function adminUsersView() {
-  const r = await Backend.adminUsers(); if (r.error) return toast(r.error, 'err'); const users = r.users || [];
-  $('#adminMain').innerHTML = `<div class="card"><div class="flex between center wrap gap mb12"><h3 class="card-title" style="margin:0">إدارة المستخدمين (${users.length})</h3><input class="input" id="adminUserSearch" placeholder="بحث..." style="max-width:260px" oninput="adminFilterUsers(this.value)"></div><div class="table-wrap"><table><thead><tr><th>الاسم</th><th>الهاتف</th><th>البريد</th><th>الباقة</th><th>الحالة</th><th>إجراءات</th></tr></thead><tbody id="adminUserRows">${users.map(u => `<tr data-user-row><td>${esc(u.name)}</td><td>${esc(u.phone)}</td><td>${esc(u.email)}</td><td>${esc(u.plan)}${u.plan_expires_at ? `<div class="small muted">${dateAr(u.plan_expires_at)}</div>` : ''}</td><td>${statusPill(u.status)}</td><td><div class="flex gap"><button class="btn btn-ghost btn-sm" onclick="adminUserAction('${esc(u.id)}','${u.status === 'active' ? 'suspended' : 'active'}')">${u.status === 'active' ? 'إيقاف' : 'تفعيل'}</button><button class="btn btn-gold btn-sm" onclick="adminUserAction('${esc(u.id)}','pro')">منح PRO</button><button class="btn btn-ghost btn-sm" onclick="adminUserAction('${esc(u.id)}','free')">FREE</button></div></td></tr>`).join('')}</tbody></table></div></div>`;
-}
-function adminFilterUsers(q) { const s = q.toLowerCase(); $$('[data-user-row]').forEach(tr => { tr.style.display = tr.innerText.toLowerCase().includes(s) ? '' : 'none'; }); }
-async function adminUserAction(id, action) {
-  const body = action === 'pro' ? { plan: 'pro', extend_days: 30 } : action === 'free' ? { plan: 'free' } : { status: action };
-  const r = await Backend.adminUserUpdate(id, body); if (r.error) return toast(r.error, 'err'); toast('تم التحديث'); adminUsersView();
-}
-async function adminPlansView() {
-  const r = await Backend.adminPlans(); if (r.error) return toast(r.error, 'err'); const plans = r.plans || []; adminPlansCache = plans;
-  $('#adminMain').innerHTML = `<div class="card"><div class="flex between center mb12"><h3 class="card-title" style="margin:0">الباقات والأسعار</h3><button class="btn btn-gold btn-sm" onclick="adminPlanModal()">+ باقة جديدة</button></div><div class="table-wrap"><table><thead><tr><th>الاسم</th><th>السعر</th><th>المدة</th><th>الحالة</th><th>إجراءات</th></tr></thead><tbody>${plans.map(p => `<tr><td>${esc(p.name)}<div class="small muted">${esc(p.code)}</div></td><td>${money(p.price)}</td><td>${p.durationDays || p.duration_days || 30} يوم</td><td>${p.isActive !== false ? '<span class="pill green">مفعّلة</span>' : '<span class="pill gray">موقوفة</span>'}</td><td><div class="flex gap"><button class="btn btn-ghost btn-sm" onclick="adminPlanModal('${esc(p.id)}')">تعديل</button><button class="btn btn-danger btn-sm" onclick="adminPlanDelete('${esc(p.id)}')">حذف</button></div></td></tr>`).join('')}</tbody></table></div></div>`;
-}
-function adminPlanModal(id) {
-  const existing = id ? adminPlansCache.find(p => p.id === id) : null; const p = existing || { name: '', tagline: '', price: 99, durationDays: 30, features: [], isActive: true, isPublic: true };
-  openModal(id ? 'تعديل الباقة' : 'باقة جديدة', `<div class="form-row"><div class="field"><label>الاسم</label><input class="input" id="apName" value="${esc(p.name)}"></div><div class="field"><label>السعر</label><input class="input" id="apPrice" type="number" min="0" value="${p.price}"></div></div><div class="form-row"><div class="field"><label>المدة (يوم)</label><input class="input" id="apDays" type="number" min="1" value="${p.durationDays || 30}"></div><div class="field"><label>وصف مختصر</label><input class="input" id="apTag" value="${esc(p.tagline || '')}"></div></div><div class="field"><label>المميزات (سطر لكل ميزة)</label><textarea class="input" id="apFeatures">${esc((p.features || []).join('\n'))}</textarea></div><div class="flex gap wrap mb12"><label class="small"><input type="checkbox" id="apActive" ${p.isActive !== false ? 'checked' : ''}> مفعّلة</label><label class="small"><input type="checkbox" id="apPublic" ${p.isPublic !== false ? 'checked' : ''}> ظاهرة</label></div><button class="btn btn-gold btn-block" onclick="adminPlanSave('${id || ''}')">حفظ</button>`);
-}
-async function adminPlanSave(id) {
-  const body = { name: $('#apName').value, price: +$('#apPrice').value, durationDays: +$('#apDays').value, tagline: $('#apTag').value, features: $('#apFeatures').value.split('\n').map(x => x.trim()).filter(Boolean), isActive: $('#apActive').checked, isPublic: $('#apPublic').checked };
-  const r = await Backend.adminPlanSave(id || null, body); if (r.error) return toast(r.error, 'err'); closeModal(); toast('تم الحفظ'); state.plans = (await Backend.getPlans()).plans; adminPlansView();
-}
-async function adminPlanDelete(id) { if (!confirm('إيقاف هذه الباقة؟')) return; const r = await Backend.adminPlanDelete(id); if (r.error) return toast(r.error, 'err'); toast('تم'); adminPlansView(); }
-async function adminProductsView() {
-  const r = await Backend.adminProducts(); if (r.error) return toast(r.error, 'err'); const products = r.products || []; adminProductsCache = products;
-  $('#adminMain').innerHTML = `<div class="card"><div class="flex between center mb12"><h3 class="card-title" style="margin:0">خدمات المتجر</h3><button class="btn btn-gold btn-sm" onclick="adminProductModal()">+ خدمة جديدة</button></div><div class="table-wrap"><table><thead><tr><th>الخدمة</th><th>السعر</th><th>التصنيف</th><th>الحالة</th><th>إجراءات</th></tr></thead><tbody>${products.map(p => `<tr><td>${esc(p.name)}<div class="small muted">${esc(p.shortDescription || '')}</div></td><td>${money(p.price)}</td><td>${esc(p.category)}</td><td>${p.isActive !== false ? '<span class="pill green">ظاهرة</span>' : '<span class="pill gray">مخفية</span>'}</td><td><div class="flex gap"><button class="btn btn-ghost btn-sm" onclick="adminProductModal('${esc(p.id)}')">تعديل</button><button class="btn btn-danger btn-sm" onclick="adminProductDelete('${esc(p.id)}')">إخفاء</button></div></td></tr>`).join('')}</tbody></table></div></div>`;
-}
-function adminProductModal(id) {
-  const existing = id ? adminProductsCache.find(p => p.id === id) : null; const p = existing || { name: '', shortDescription: '', description: '', details: [], price: 99, imageUrl: 'images/efootball-hero.jpg', category: 'analysis', badge: '', isActive: true };
-  openModal(id ? 'تعديل الخدمة' : 'خدمة جديدة', `<div class="field"><label>اسم الخدمة</label><input class="input" id="adName" value="${esc(p.name)}"></div><div class="field"><label>وصف مختصر</label><input class="input" id="adShort" value="${esc(p.shortDescription || '')}"></div><div class="field"><label>وصف تفصيلي</label><textarea class="input" id="adDesc">${esc(p.description || '')}</textarea></div><div class="field"><label>التفاصيل (سطر لكل تفصيل)</label><textarea class="input" id="adDetails">${esc((p.details || []).join('\n'))}</textarea></div><div class="form-row"><div class="field"><label>السعر</label><input class="input" id="adPrice" type="number" min="0" value="${p.price}"></div><div class="field"><label>التصنيف</label><select class="input" id="adCat">${['analysis','squad','coaching'].map(c => `<option value="${c}" ${p.category === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div></div><div class="form-row"><div class="field"><label>رابط الصورة</label><input class="input" id="adImg" value="${esc(p.imageUrl || '')}"></div><div class="field"><label>شارة</label><input class="input" id="adBadge" value="${esc(p.badge || '')}"></div></div><label class="small mb12"><input type="checkbox" id="adActive" ${p.isActive !== false ? 'checked' : ''}> ظاهرة في المتجر</label><button class="btn btn-gold btn-block" onclick="adminProductSave('${id || ''}')">حفظ</button>`);
-}
-async function adminProductSave(id) {
-  const body = { name: $('#adName').value, shortDescription: $('#adShort').value, description: $('#adDesc').value, details: $('#adDetails').value.split('\n').map(x => x.trim()).filter(Boolean), price: +$('#adPrice').value, category: $('#adCat').value, imageUrl: $('#adImg').value, badge: $('#adBadge').value, isActive: $('#adActive').checked };
-  const r = await Backend.adminProductSave(id || null, body); if (r.error) return toast(r.error, 'err'); closeModal(); toast('تم الحفظ'); state.products = (await Backend.getProducts()).products; adminProductsView();
-}
-async function adminProductDelete(id) { if (!confirm('إخفاء الخدمة؟')) return; const r = await Backend.adminProductDelete(id); if (r.error) return toast(r.error, 'err'); toast('تم'); adminProductsView(); }
-function adminRenderOrders(filter) {
-  const orders = (window.__adminOrders || []).filter(o => filter === 'all' || o.status === filter);
-  const box = $('#adminOrdersTable'); if (!box) return;
-  box.innerHTML = `<div class="table-wrap"><table><thead><tr><th>#</th><th>المستخدم</th><th>النوع</th><th>الإجمالي</th><th>المرجع</th><th>الحالة</th><th>إجراءات</th></tr></thead><tbody>${orders.map(o => `<tr><td>${o.id}</td><td>${esc(o.user_name || '—')}<div class="small muted">${esc(o.user_phone || '')}</div></td><td>${o.type === 'subscription' ? 'اشتراك ' + esc(o.plan_name || '') : esc(o.product_name || 'خدمة')}</td><td>${money(o.total)}</td><td class="small">${esc(o.payment_reference || '—')}<div class="muted">${esc(o.payment_method || '')}</div></td><td>${statusPill(o.status)}</td><td>${o.status === 'pending_review' ? `<div class="flex gap"><button class="btn btn-gold btn-sm" onclick="adminOrderAction('${esc(o.id)}','approve')">تأكيد</button><button class="btn btn-danger btn-sm" onclick="adminOrderAction('${esc(o.id)}','reject')">رفض</button></div>` : '<span class="small muted">—</span>'}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">لا طلبات.</td></tr>'}</tbody></table></div>`;
-}
-async function adminOrdersView() {
-  const r = await Backend.adminOrders(); if (r.error) return toast(r.error, 'err'); window.__adminOrders = r.orders || []; const orders = window.__adminOrders;
-  $('#adminMain').innerHTML = `<div class="card"><div class="flex between center wrap gap mb12"><h3 class="card-title" style="margin:0">إدارة الطلبات (${orders.length})</h3><select class="input" id="adminOrderFilter" style="max-width:200px" onchange="adminRenderOrders(this.value)"><option value="all">الكل</option><option value="pending_review">قيد المراجعة</option><option value="completed">مكتمل</option><option value="rejected">مرفوض</option></select></div><div id="adminOrdersTable"></div></div>`;
-  adminRenderOrders('all');
-}
-function adminOrderAction(id, action) {
-  openModal(action === 'approve' ? 'تأكيد الطلب' : 'رفض الطلب', `<div class="note ${action === 'approve' ? '' : 'warn'} mb12"><div>${action === 'approve' ? 'سيتم تأكيد الدفع وتفعيل الطلب/الاشتراك وإشعار المستخدم.' : 'سيتم رفض الطلب وإشعار المستخدم.'}</div></div><div class="field"><label>ملاحظة</label><input class="input" id="adminOrderNote"></div><button class="btn ${action === 'approve' ? 'btn-gold' : 'btn-danger'} btn-block" onclick="adminOrderConfirm('${esc(id)}','${action}')">تأكيد</button>`);
-}
-async function adminOrderConfirm(id, action) { const r = await Backend.adminOrderAction(id, action, $('#adminOrderNote').value); if (r.error) return toast(r.error, 'err'); closeModal(); toast('تم التحديث'); adminOrdersView(); }
-function adminNotifyView() {
-  $('#adminMain').innerHTML = `<div class="card"><h3 class="card-title" style="margin-top:0">إرسال إشعار للمستخدمين</h3><div class="field"><label>العنوان</label><input class="input" id="anTitle" placeholder="عنوان الإشعار"></div><div class="field"><label>النص</label><textarea class="input" id="anBody" placeholder="نص الإشعار"></textarea></div><div class="form-row"><div class="field"><label>الجمهور</label><select class="input" id="anAudience"><option value="all">الكل</option><option value="pro">مشتركو PRO</option><option value="free">المجانية</option></select></div><div class="field"><label>رابط</label><input class="input" id="anLink" placeholder="#/subscriptions"></div></div><button class="btn btn-gold btn-block" onclick="adminBroadcast()">إرسال الإشعار</button><div class="note mt12"><div>الإشعارات تُخزّن في قاعدة البيانات وتظهر للمستخدم في حسابه.</div></div></div>`;
-}
-async function adminBroadcast() { const body = { title: $('#anTitle').value, body: $('#anBody').value, audience: $('#anAudience').value, link: $('#anLink').value }; if (!body.title) return toast('أدخل العنوان', 'err'); const r = await Backend.adminBroadcast(body); if (r.error) return toast(r.error, 'err'); toast(r.message || 'تم الإرسال'); }
-async function adminSettingsView() {
-  const r = await Backend.adminSettings(); if (r.error) return toast(r.error, 'err'); const s = r.settings || {};
-  $('#adminMain').innerHTML = `<div class="grid two"><div class="card"><h3 class="card-title" style="margin-top:0">إعدادات المنصة</h3><div class="field"><label>اسم المنصة</label><input class="input" id="asName" value="${esc(s.platformName || '')}"></div><div class="field"><label>الشعار النصي</label><input class="input" id="asTag" value="${esc(s.tagline || '')}"></div><div class="field"><label>رقم واتساب (دولي بدون +)</label><input class="input" id="asWa" value="${esc(s.whatsappNumber || '')}"><div class="hint">مثال: 201000000000 — يظهر كرابط فقط.</div></div><div class="field"><label>رابط تليجرام</label><input class="input" id="asTg" value="${esc(s.telegramUrl || '')}"><div class="hint">اتركه فارغًا لإخفاء الزر.</div></div><div class="field"><label>بريد الدعم</label><input class="input" id="asEmail" value="${esc(s.supportEmail || '')}"></div><div class="field"><label>إعلان المنصة</label><textarea class="input" id="asAnnounce">${esc(s.announcement || '')}</textarea></div></div>
-    <div class="card"><h3 class="card-title" style="margin-top:0">الدفع والوصول</h3><div class="field"><label>ملاحظة الدفع</label><textarea class="input" id="asPay">${esc(s.paymentsNote || '')}</textarea></div><div class="form-row"><div class="field"><label>معرّف InstaPay</label><input class="input" id="asInsta" value="${esc(s.instapayHandle || '')}"></div><div class="field"><label>رقم Vodafone Cash</label><input class="input" id="asVodafone" value="${esc(s.vodafoneCash || '')}"></div></div><div class="field"><label>موديل AI</label><input class="input" id="asModel" value="${esc(s.aiModel || 'gpt-4o-mini')}"></div><div class="field"><label>رمز الدخول الإداري الجديد (6 أرقام)</label><input class="input" id="asAdminCode" inputmode="numeric" maxlength="6" placeholder="اتركه فارغًا للإبقاء على الحالي"><div class="hint">يُخزّن مشفّرًا (PBKDF2) في Firestore، ولا يظهر في الواجهة.</div></div><div class="note ${r.ai?.enabled ? '' : 'warn'}"><div>حالة AI: ${r.ai?.enabled ? 'مفعّل' : 'غير مفعّل — استخدم المحرك المحلي'}. موديل: ${esc(r.ai?.model || '')}</div></div><button class="btn btn-gold btn-block mt12" onclick="adminSaveSettings()">حفظ الإعدادات</button></div></div>`;
-}
-async function adminSaveSettings() {
-  const body = { platform_name: $('#asName').value, tagline: $('#asTag').value, whatsapp_number: $('#asWa').value, telegram_url: $('#asTg').value, support_email: $('#asEmail').value, announcement: $('#asAnnounce').value, payments_note: $('#asPay').value, instapay_handle: $('#asInsta').value, vodafone_cash: $('#asVodafone').value, ai_model: $('#asModel').value, admin_access_code: $('#asAdminCode').value };
-  const r = await Backend.adminSettingsSave(body); if (r.error) return toast(r.error, 'err'); toast('تم حفظ الإعدادات'); state.settings = (await Backend.bootstrap()).settings; renderShell();
-}
-async function adminAuditView() {
-  const r = await Backend.adminAudit(); if (r.error) return toast(r.error, 'err'); const logs = r.logs || [];
-  $('#adminMain').innerHTML = `<div class="card"><h3 class="card-title" style="margin-top:0">سجل العمليات الإدارية</h3><div class="table-wrap"><table><thead><tr><th>#</th><th>الإجراء</th><th>الكيان</th><th>بواسطة</th><th>الوقت</th></tr></thead><tbody>${logs.map(l => `<tr><td>${l.id}</td><td>${esc(l.action)}</td><td>${esc(l.entity || '—')}</td><td>${esc(l.admin_name || l.adminName || '—')}</td><td>${dateTimeAr(l.created_at || l.createdAt)}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">لا سجلات بعد.</td></tr>'}</tbody></table></div></div>`;
-}
-async function adminAiView() {
-  const r = await Backend.adminAi(); if (r.error) return toast(r.error, 'err');
-  $('#adminMain').innerHTML = `<div class="grid cards mb16"><div class="card"><div class="card-title" style="margin:0">إجمالي التقارير</div><div class="price" style="font-size:28px">${r.total || 0}</div></div>${(r.byKind || []).map(k => `<div class="card"><div class="card-title" style="margin:0">${esc(k.kind)}</div><div class="price" style="font-size:24px">${k.c}</div></div>`).join('')}</div><div class="grid two"><div class="card"><h3 class="card-title" style="margin-top:0">حسب المحرك</h3>${(r.byEngine || []).map(e => `<div class="kv"><span>${esc(e.engine || '—')}</span><b>${e.c}</b></div>`).join('') || '<div class="empty">لا بيانات</div>'}</div><div class="card"><h3 class="card-title" style="margin-top:0">أكثر المستخدمين</h3><div class="table-wrap"><table><thead><tr><th>المستخدم</th><th>الباقة</th><th>التقارير</th></tr></thead><tbody>${(r.topUsers || []).map(u => `<tr><td>${esc(u.name)}</td><td>${esc(u.plan)}</td><td>${u.c}</td></tr>`).join('')}</tbody></table></div></div></div>`;
-}
-async function adminLogout() { await Backend.logout(); state.admin = null; adminPending = null; toast('تم الخروج'); renderAdmin(); }
 /* ------------------------------- init ------------------------------- */
 document.addEventListener('click', e => {
   const need = e.target.closest('[data-need]');
-  if (need) { toast('سيتم تفعيل هذا الزر بعد ضبط بيانات التواصل من لوحة الإدارة', 'err'); }
+  if (need) { toast('سيتم تفعيل هذا الزر بعد ضبط بيانات التواصل', 'err'); }
 });
 window.addEventListener('hashchange', () => { renderRoute(); });
 function startApp() {
