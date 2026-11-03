@@ -356,6 +356,7 @@ class FirebaseBackend {
           p = { id: u.uid, name: u.displayName || 'مستخدم Google', phone: u.phoneNumber || '', email: u.email || '', pin_hash: null, pin_salt: null, status: 'active', plan: 'free', plan_expires_at: null, ai_usage_count: 0, created_at: nowStr(), last_login_at: nowStr() };
           await ref.set(p).catch(() => {});
           await this.db().doc('userSettings/' + u.uid).set({ notify_orders: true, notify_subscription: true, notify_platform: true, notify_ai: true, public_stats: false, marketing: false }).catch(() => {});
+          await this.db().collection('notifications').add({ userId: u.uid, type: 'welcome', title: `أهلًا بك في PES AI PRO <span class="svg-icon">${I.party}</span>`, body: 'تم إنشاء حسابك عبر Google بنجاح. ابدأ ببناء تشكيلتك أو حلّل فريقك.', link: '#/builder', is_read: false, created_at: nowStr() }).catch(() => {});
         } else {
           p = snap.data();
           await ref.update({ last_login_at: nowStr() }).catch(() => {});
@@ -664,28 +665,50 @@ async function boot() {
   initSplash();
   renderRoute();
 
+  const firebaseUser = await new Promise(resolve => {
+    const unsub = firebase.auth().onAuthStateChanged(user => {
+      unsub();
+      resolve(user);
+    }, () => resolve(null));
+    setTimeout(() => resolve(firebase.auth().currentUser), 1500);
+  });
+
+  if (firebaseUser) {
+    try {
+      const p = await Backend.doc('users/' + firebaseUser.uid);
+      if (p) {
+        state.user = await Backend.publicUser(p);
+        state.plan = await Backend.planInfo(p);
+        localStorage.setItem('pesai_user', JSON.stringify(state.user));
+      } else {
+        const newProfile = { id: firebaseUser.uid, name: firebaseUser.displayName || 'مستخدم', phone: firebaseUser.phoneNumber || '', email: firebaseUser.email || '', status: 'active', plan: 'free', created_at: nowStr(), last_login_at: nowStr() };
+        await Backend.db().doc('users/' + firebaseUser.uid).set(newProfile).catch(() => {});
+        state.user = await Backend.publicUser(newProfile);
+        state.plan = await Backend.planInfo(newProfile);
+        localStorage.setItem('pesai_user', JSON.stringify(state.user));
+      }
+    } catch (e) {}
+  } else {
+    state.user = null;
+    state.plan = null;
+    localStorage.removeItem('pesai_user');
+  }
+
+  renderShell();
+  renderRoute();
+
   setTimeout(async () => {
     try {
-      const data = await Promise.race([Backend.bootstrap(), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 2000))]).catch(() => null);
+      const data = await Backend.bootstrap();
       if (data) {
         state.settings = data.settings || state.settings;
         state.plans = data.plans || state.plans;
         state.products = data.products || state.products;
+        renderShell();
+        renderRoute();
       }
-      const auth = await Promise.race([Backend.me(), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 2000))]).catch(() => null);
-      if (auth && auth.user) {
-        state.user = auth.user;
-        state.plan = auth.plan;
-        localStorage.setItem('pesai_user', JSON.stringify(auth.user));
-      } else {
-        state.user = null;
-        state.plan = null;
-        localStorage.removeItem('pesai_user');
-      }
-      renderShell();
-      renderRoute();
     } catch(e) {}
-  }, 10);
+  }, 100);
 }
 function renderShell() {
   const bg = $('#bg-root');
