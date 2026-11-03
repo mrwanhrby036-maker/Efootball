@@ -677,6 +677,10 @@ async function boot() {
         state.user = auth.user;
         state.plan = auth.plan;
         localStorage.setItem('pesai_user', JSON.stringify(auth.user));
+      } else {
+        state.user = null;
+        state.plan = null;
+        localStorage.removeItem('pesai_user');
       }
       renderShell();
       renderRoute();
