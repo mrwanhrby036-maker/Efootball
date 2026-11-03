@@ -101,32 +101,65 @@ export async function signInWithPhoneNumber() { return { confirm: async () => ({
 export async function linkWithPhoneNumber() {}
 export const PhoneAuthProvider = {};
 
-export const collection = (a, b) => {
-  if (typeof a === 'string') return { __col: a + '/' + b };
-  if (a && a.__col) return { __col: a.__col + '/' + b };
-  if (a && a.__path) return { __col: a.__path + '/' + b };
-  return { __col: b };
+export const collection = (...args) => {
+  // (db, 'users') | (db, 'users', uid, 'notifications') | (colRef, 'sub')
+  const parts = args.filter(x => typeof x === 'string');
+  if (args[0] && args[0].__col) parts.unshift(args[0].__col);
+  if (args[0] && args[0].__path) parts.unshift(args[0].__path);
+  return { __col: parts.join('/') };
 };
-export const doc = (a, b, c) => {
-  if (typeof a === 'object' && a.__col) return { __path: `${a.__col}/${b}` };
-  if (a && a.__path) return { __path: `${a.__path}/${b}/${c}` };
-  return { __path: `${b}/${c || ''}` };
+export const doc = (a, b, c, d) => {
+  if (a && a.__col) return { __path: `${a.__col}/${b}` };
+  if (a && a.__path) {
+    const parts = [a.__path, b, c, d].filter(x => x !== undefined && x !== null && x !== '');
+    return { __path: parts.join('/') };
+  }
+  const parts = [b, c, d].filter(x => x !== undefined && x !== null && x !== '');
+  return { __path: parts.join('/') };
 };
-export const query = (ref) => ref;
-export const where = () => ({});
-export const orderBy = () => ({});
-export const limit = () => ({});
+// الاستعلامات: المحاكي بيرجع المرجع مع الاحتفاظ بالفلاتر كبيانات وصفية
+export const query = (ref, ...clauses) => ({ ...ref, __clauses: clauses.filter(Boolean) });
+export const where = (field, op, value) => ({ __where: { field, op, value } });
+export const orderBy = (field, dir) => ({ __orderBy: { field, dir } });
+export const limit = (n) => ({ __limit: n });
 
 export async function getDoc(ref) {
   const p = ref.__path || ref.path;
   return snap(p);
 }
 export async function getDocs(ref) {
-  const p = ref.__path || ref.path || '';
-  const base = p.replace(/\/$/, '');
-  const docs = [...store.entries()]
-    .filter(([k]) => k.startsWith(base + '/') && k.split('/').length === base.split('/').length + 1)
+  const p = (ref.__path || ref.path || ref.__col || '').replace(/\/$/, '');
+  if (!p) return { docs: [], size: 0, empty: true };
+  let docs = [...store.entries()]
+    .filter(([k]) => k.startsWith(p + '/') && k.split('/').length === p.split('/').length + 1)
     .map(([k]) => snap(k));
+
+  // تطبيق الفلاتر البسيطة (where / orderBy / limit) لتحاكي Firestore
+  for (const c of (ref.__clauses || [])) {
+    if (c && c.__where) {
+      const { field, op, value } = c.__where;
+      docs = docs.filter(d => {
+        const v = d.data()?.[field];
+        if (op === '==') return v === value;
+        if (op === '!=') return v !== value;
+        if (op === '>') return v > value;
+        if (op === '<') return v < value;
+        if (op === 'array-contains') return Array.isArray(v) && v.includes(value);
+        return true;
+      });
+    }
+  }
+  for (const c of (ref.__clauses || [])) {
+    if (c && c.__orderBy) {
+      const { field, dir } = c.__orderBy;
+      const val = (d) => {
+        const v = d.data()?.[field];
+        return v && v.toMillis ? v.toMillis() : (v ?? 0);
+      };
+      docs.sort((a, b) => (val(a) > val(b) ? 1 : val(a) < val(b) ? -1 : 0) * (dir === 'desc' ? -1 : 1));
+    }
+    if (c && c.__limit) docs = docs.slice(0, c.__limit);
+  }
   return { docs, size: docs.length, empty: docs.length === 0 };
 }
 export async function setDoc(ref, data) {

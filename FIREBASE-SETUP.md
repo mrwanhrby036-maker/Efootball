@@ -62,7 +62,7 @@ const FIREBASE_CONFIG = {
 };
 ```
 
-**اعمل نفس الحاجة في `admin.js`** (نفس القيم بالظبط).
+**اعمل نفس الحاجة في `admin.html`** (نفس القيم بالظبط — الكود جوّه الملف في آخر الصفحة، دوّر على `FIREBASE_CONFIG`).
 
 > الـ `apiKey` هنا **مش سر** — ده معرّف عام مخصص للمتصفح، والحماية الحقيقية في
 > `firestore.rules` + Authorized domains. مفاتيح الإدارة الحقيقية مالهاش وجود في الكود.
@@ -154,7 +154,7 @@ const FIREBASE_CONFIG = {
 | `index.html` | واجهة المنصة (٢٠+ شاشة) |
 | `styles.css` | الهوية السوداء الذهبية + كل الحركات |
 | `app.js` | منطق المنصة (Firebase + Gemini) |
-| `admin.html` + `admin.js` | **لوحة الأدمن المنفصلة تمامًا** |
+| `admin.html` | **لوحة الأدمن كاملة في ملف واحد** (HTML + CSS + JS مدمجين) |
 | `vendor/firebase.js` | حزمة Firebase محلية (مش CDN) |
 | `firestore.rules` | أمان البيانات — القواعد الحقيقية |
 | `tests/` | اختبارات E2E (٥٢ فحص) — مش بتتنشر |
