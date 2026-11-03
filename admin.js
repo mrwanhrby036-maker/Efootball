@@ -1,0 +1,915 @@
+/* ═══════════════════════════════════════════════════════════════
+   PES AI PRO — ADMIN (تطبيق مستقل تمامًا عن واجهة المستخدم)
+   الصلاحية الحقيقية محفوظة في Firestore: users/{uid}.role === 'admin'
+   وكل قراءة/كتابة محمية بـ firestore.rules — مش بمجرد إخفاء الأزرار.
+   ═══════════════════════════════════════════════════════════════ */
+
+import {
+  initializeApp, getApps, getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged,
+  getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, collection, getDocs,
+  query, where, orderBy, limit, serverTimestamp, Timestamp, increment, writeBatch, deleteField
+} from './vendor/firebase.js';
+
+/* ── نفس إعدادات المشروع (لازم يطابق app.js) ── */
+const FIREBASE_CONFIG = {
+  apiKey: "PUT_API_KEY_HERE",
+  authDomain: "PUT_AUTH_DOMAIN_HERE",
+  projectId: "PUT_PROJECT_ID_HERE",
+  storageBucket: "PUT_STORAGE_BUCKET_HERE",
+  messagingSenderId: "PUT_MESSAGING_SENDER_ID_HERE",
+  appId: "PUT_APP_ID_HERE"
+};
+const CONFIGURED = FIREBASE_CONFIG.apiKey && !FIREBASE_CONFIG.apiKey.startsWith('PUT_');
+
+const qs = (s, r = document) => r.querySelector(s);
+const qsa = (s, r = document) => Array.from(r.querySelectorAll(s));
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const lc = (s) => String(s || '').toLowerCase().trim();
+const num = (n) => Number(n || 0).toLocaleString('ar-EG');
+const money = (n) => `${num(n)} ج.م`;
+const clampNum = (n, a, b) => Math.min(b, Math.max(a, Number(n) || 0));
+function fmtDate(ts) {
+  if (!ts) return '—';
+  const d = ts?.toDate ? ts.toDate() : new Date(ts);
+  return isNaN(d) ? '—' : d.toLocaleDateString('ar-EG', { month: 'short', day: 'numeric', year: '2-digit' });
+}
+function fmtDT(ts) {
+  if (!ts) return '—';
+  const d = ts?.toDate ? ts.toDate() : new Date(ts);
+  return isNaN(d) ? '—' : d.toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+}
+
+let app, auth, db;
+if (CONFIGURED) {
+  app = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
+  auth = getAuth(app);
+  db = getFirestore(app);
+}
+
+/* ── UI helpers ── */
+function toast(msg, type = '') {
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = (type === 'err' ? '⚠️ ' : type === 'ok' ? '✅ ' : 'ℹ️ ') + msg;
+  qs('#toasts').appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 250); }, 4000);
+}
+function modal(title, bodyHtml, actions = [{ label: 'حسناً', value: true, cls: 'gold' }]) {
+  return new Promise(res => {
+    qs('#modalTitle').textContent = title;
+    qs('#modalBody').innerHTML = bodyHtml;
+    const act = qs('#modalActions');
+    act.innerHTML = '';
+    const close = (v) => { qs('#modalBack').classList.add('hidden'); res(v); };
+    actions.forEach(a => {
+      const b = document.createElement('button');
+      b.className = 'btn ' + (a.cls || 'ghost');
+      b.textContent = a.label;
+      b.onclick = () => close(a.value);
+      act.appendChild(b);
+    });
+    qs('#modalBack').classList.remove('hidden');
+    qs('#modalBack').onclick = (e) => { if (e.target.id === 'modalBack') close(false); };
+  });
+}
+const confirmBox = (t, b, danger = false) => modal(t, b, [
+  { label: 'إلغاء', value: false, cls: 'ghost' },
+  { label: danger ? 'نعم، احذف' : 'تأكيد', value: true, cls: danger ? 'danger' : 'gold' }
+]);
+
+function authErr(e) {
+  const map = {
+    'auth/invalid-credential': 'البريد أو كلمة المرور غير صحيحة.',
+    'auth/wrong-password': 'كلمة المرور غير صحيحة.',
+    'auth/user-not-found': 'مفيش حساب بالبريد ده.',
+    'auth/too-many-requests': 'محاولات كتير — استنى شوية.',
+    'auth/invalid-email': 'البريد غير صالح.',
+    'auth/network-request-failed': 'مشكلة في الاتصال.'
+  };
+  for (const k in map) if (String(e?.code || '').includes(k)) return map[k];
+  return e?.message || 'خطأ غير متوقع';
+}
+function setMsg(txt, type = '') {
+  const el = qs('#aMsg');
+  el.textContent = txt || '';
+  el.className = 'msg' + (txt ? ' show ' + type : '');
+}
+
+/* ── الحالة ── */
+const S = {
+  me: null, profile: null, page: 'overview',
+  users: [], orders: [], products: [], players: [], admins: [], logs: [], plans: {}, config: {},
+  search: ''
+};
+
+/* ═══════════════ الدخول ═══════════════ */
+qs('#adminLogin').onsubmit = async (e) => {
+  e.preventDefault();
+  const email = lc(qs('#aEmail').value);
+  const pass = qs('#aPass').value;
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return setMsg('اكتب البريد الإداري صح', 'err');
+  if (!pass) return setMsg('اكتب كلمة مرور الأدمن', 'err');
+  const btn = qs('#aLoginBtn'); btn.disabled = true; btn.textContent = 'جارٍ التحقق…';
+  try {
+    await signInWithEmailAndPassword(auth, email, pass);
+    setMsg('');
+  } catch (err) {
+    setMsg(authErr(err), 'err');
+    await logAttempt(email, false, err?.code || '');
+  } finally { btn.disabled = false; btn.textContent = 'دخول لوحة التحكم'; }
+};
+
+async function logAttempt(email, ok, reason) {
+  try {
+    await addDoc(collection(db, 'adminAudit'), {
+      action: ok ? 'admin_login' : 'admin_login_failed',
+      email, reason, at: serverTimestamp()
+    });
+  } catch {}
+}
+
+onAuthStateChanged(auth, async (user) => {
+  if (!user) { showLogin(); return; }
+  try {
+    const snap = await getDoc(doc(db, 'users', user.uid));
+    if (!snap.exists() || snap.data().role !== 'admin' || snap.data().status === 'blocked') {
+      await signOut(auth);
+      setMsg('الحساب ده مش مصرّح له بالدخول للوحة التحكم.', 'err');
+      showLogin();
+      return;
+    }
+    S.me = user;
+    S.profile = { uid: user.uid, ...snap.data() };
+    await logAttempt(user.email, true, '');
+    qs('#loginWrap').classList.add('hidden');
+    qs('#shell').classList.remove('hidden');
+    qs('#logoutBtn').onclick = async () => {
+      if (!await confirmBox('خروج', 'تسجيل الخروج من لوحة التحكم؟')) return;
+      await signOut(auth);
+    };
+    buildNav();
+    await loadAll();
+    render();
+  } catch (err) {
+    console.error(err);
+    setMsg('خطأ في التحقق: ' + (err?.message || err), 'err');
+    await signOut(auth).catch(() => {});
+    showLogin();
+  }
+});
+
+function showLogin() {
+  qs('#shell').classList.add('hidden');
+  qs('#loginWrap').classList.remove('hidden');
+  qs('#aPass').value = '';
+}
+
+/* ═══════════════ التنقل ═══════════════ */
+const PAGES = [
+  ['overview', 'نظرة عامة'],
+  ['users', 'المستخدمين'],
+  ['orders', 'الطلبات'],
+  ['products', 'المتجر'],
+  ['plans', 'الاشتراكات'],
+  ['players', 'اللاعبين'],
+  ['notifs', 'الإشعارات'],
+  ['ai', 'تقارير AI'],
+  ['settings', 'الإعدادات'],
+  ['audit', 'سجل العمليات']
+];
+
+function buildNav() {
+  qs('#nav').innerHTML = PAGES.map(([k, l]) => `<button data-page="${k}" class="${S.page === k ? 'active' : ''}">${l}</button>`).join('');
+  qsa('#nav button').forEach(b => b.onclick = () => {
+    S.page = b.dataset.page;
+    S.search = '';
+    buildNav();
+    render();
+  });
+}
+
+/* ═══════════════ تحميل البيانات ═══════════════ */
+async function loadAll() {
+  const safe = async (p, fb = { docs: [] }) => { try { return await p; } catch (e) { console.warn(e); return fb; } };
+  const [users, orders, products, players, admins, logs, cfg, plans] = await Promise.all([
+    safe(getDocs(query(collection(db, 'users'), orderBy('createdAt', 'desc'), limit(500)))),
+    safe(getDocs(query(collection(db, 'orders'), orderBy('createdAt', 'desc'), limit(300)))),
+    safe(getDocs(query(collection(db, 'products'), orderBy('sort', 'asc')))),
+    safe(getDocs(query(collection(db, 'players'), orderBy('name', 'asc'), limit(1000)))),
+    safe(getDocs(collection(db, 'admins'))),
+    safe(getDocs(query(collection(db, 'adminAudit'), orderBy('at', 'desc'), limit(120)))),
+    safe(getDoc(doc(db, 'config', 'main'))),
+    safe(getDoc(doc(db, 'config', 'plans')))
+  ]);
+  S.users = users.docs.map(d => ({ id: d.id, ...d.data() }));
+  S.orders = orders.docs.map(d => ({ id: d.id, ...d.data() }));
+  S.products = products.docs.map(d => ({ id: d.id, ...d.data() }));
+  S.players = players.docs.map(d => ({ id: d.id, ...d.data() }));
+  S.admins = admins.docs.map(d => ({ id: d.id, ...d.data() }));
+  S.logs = logs.docs.map(d => ({ id: d.id, ...d.data() }));
+  S.config = cfg.exists() ? cfg.data() : {};
+  S.plans = plans.exists() ? plans.data() : {};
+}
+
+async function reload() { await loadAll(); render(); }
+
+/* ═══════════════ الرسم ═══════════════ */
+function render() {
+  const m = qs('#main');
+  switch (S.page) {
+    case 'overview': m.innerHTML = viewOverview(); bindOverview(); break;
+    case 'users': m.innerHTML = viewUsers(); bindUsers(); break;
+    case 'orders': m.innerHTML = viewOrders(); bindOrders(); break;
+    case 'products': m.innerHTML = viewProducts(); bindProducts(); break;
+    case 'plans': m.innerHTML = viewPlans(); bindPlans(); break;
+    case 'players': m.innerHTML = viewPlayers(); bindPlayers(); break;
+    case 'notifs': m.innerHTML = viewNotifs(); bindNotifs(); break;
+    case 'ai': m.innerHTML = viewAi(); break;
+    case 'settings': m.innerHTML = viewSettings(); bindSettings(); break;
+    case 'audit': m.innerHTML = viewAudit(); break;
+  }
+}
+
+/* ── نظرة عامة ── */
+function viewOverview() {
+  const now = Date.now();
+  const active7 = S.users.filter(u => (u.lastSeen?.toMillis?.() || 0) > now - 7 * 864e5).length;
+  const active24 = S.users.filter(u => (u.lastSeen?.toMillis?.() || 0) > now - 864e5).length;
+  const pros = S.users.filter(u => currentPlan(u) === 'PRO').length;
+  const pending = S.orders.filter(o => o.status === 'pending').length;
+  const revenue = S.orders.filter(o => ['confirmed', 'delivered'].includes(o.status)).reduce((a, o) => a + (Number(o.total) || 0), 0);
+  const blocked = S.users.filter(u => u.status === 'blocked').length;
+  return `
+    <div class="page-head"><h2>نظرة عامة</h2><p>كل أرقام المنصة لحظيًا من قاعدة البيانات.</p></div>
+    <div class="kpis">
+      <div class="kpi"><span>إجمالي المستخدمين</span><b>${num(S.users.length)}</b><small>${num(blocked)} موقوف</small></div>
+      <div class="kpi"><span>نشط ٢٤ ساعة</span><b>${num(active24)}</b><small>${num(active7)} في آخر ٧ أيام</small></div>
+      <div class="kpi"><span>مشتركو PRO</span><b>${num(pros)}</b><small>${S.users.length ? Math.round(pros / S.users.length * 100) : 0}% من المستخدمين</small></div>
+      <div class="kpi"><span>طلبات بانتظار المراجعة</span><b style="color:${pending ? '#F5D778' : '#7ee2b0'}">${num(pending)}</b><small>${num(S.orders.length)} طلب إجمالي</small></div>
+      <div class="kpi"><span>إجمالي مؤكد</span><b>${money(revenue)}</b><small>بعد تأكيد الدفع فقط</small></div>
+      <div class="kpi"><span>خدمات المتجر</span><b>${num(S.products.length)}</b><small>${S.products.filter(p => p.visible !== false).length} ظاهرة</small></div>
+    </div>
+
+    <div class="panel">
+      <h3>أحدث المستخدمين <small>آخر ٨</small></h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>الاسم</th><th>الموبايل</th><th>الباقة</th><th>انضم</th><th>آخر ظهور</th></tr></thead>
+        <tbody>${S.users.slice(0, 8).map(u => `<tr>
+          <td>${esc(u.name || '—')}<div class="mini">${esc(u.email || '')}</div></td>
+          <td style="direction:ltr;text-align:right">${esc(u.phone || '—')}</td>
+          <td><span class="tag ${currentPlan(u) === 'PRO' ? 'ok' : 'mut'}">${currentPlan(u)}</span></td>
+          <td class="mini">${fmtDate(u.createdAt)}</td>
+          <td class="mini">${fmtDate(u.lastSeen)}</td>
+        </tr>`).join('') || '<tr><td colspan="5" class="empty">مفيش مستخدمين لسه</td></tr>'}</tbody>
+      </table></div>
+    </div>
+
+    <div class="panel">
+      <h3>طلبات تحتاج قرار <small>${pending} طلب</small></h3>
+      ${S.orders.filter(o => o.status === 'pending').slice(0, 6).map(o => `
+        <div style="display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.05);flex-wrap:wrap">
+          <span class="tag pend">بانتظار</span>
+          <div style="flex:1;min-width:150px">
+            <b style="font-size:12px">${esc(o.userName || '—')} · ${o.type === 'plan' ? 'اشتراك' : 'خدمة'}</b>
+            <div class="mini">${(o.items || []).map(i => esc(i.name)).join(' + ')} — ${money(o.total)}</div>
+          </div>
+          <button class="btn gold sm" data-quick-approve="${o.id}">تأكيد الدفع</button>
+        </div>`).join('') || '<div class="empty">مفيش طلبات بانتظار المراجعة</div>'}
+    </div>`;
+}
+function bindOverview() {
+  qsa('[data-quick-approve]').forEach(b => b.onclick = () => approveOrder(b.dataset.quickApprove));
+}
+
+function currentPlan(u) {
+  if (u.plan !== 'PRO') return 'FREE';
+  if (!u.planExpiresAt) return 'PRO';
+  const exp = u.planExpiresAt.toDate ? u.planExpiresAt.toDate() : new Date(u.planExpiresAt);
+  return exp.getTime() > Date.now() ? 'PRO' : 'FREE';
+}
+
+/* ── المستخدمين ── */
+function viewUsers() {
+  const t = lc(S.search);
+  const rows = S.users.filter(u => !t || lc(`${u.name} ${u.email} ${u.phone}`).includes(t));
+  return `
+    <div class="page-head"><h2>إدارة المستخدمين</h2><p>${num(S.users.length)} مستخدم — تقدر توقف/تفعّل، تعدّل الباقة، أو تحذف.</p></div>
+    <div class="panel">
+      <div class="search"><input id="uSearch" class="input" placeholder="ابحث بالاسم / الإيميل / الموبايل" value="${esc(S.search)}" /></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>المستخدم</th><th>الموبايل</th><th>الباقة</th><th>الحالة</th><th>انضم</th><th>إجراءات</th></tr></thead>
+        <tbody>${rows.map(u => `<tr>
+          <td><b style="font-size:11.5px">${esc(u.name || '—')}</b><div class="mini">${esc(u.email || '—')}</div>
+            ${u.pin?.hash ? '<span class="tag ok" style="font-size:8.5px">PIN</span>' : ''}
+            ${u.role === 'admin' ? '<span class="tag pend" style="font-size:8.5px">ADMIN</span>' : ''}</td>
+          <td style="direction:ltr;text-align:right" class="mini">${esc(u.phone || '—')}</td>
+          <td><span class="tag ${currentPlan(u) === 'PRO' ? 'ok' : 'mut'}">${currentPlan(u)}</span>
+            ${u.planExpiresAt ? `<div class="mini">ينتهي ${fmtDate(u.planExpiresAt)}</div>` : ''}</td>
+          <td><span class="tag ${u.status === 'blocked' ? 'bad' : 'ok'}">${u.status === 'blocked' ? 'موقوف' : 'نشط'}</span></td>
+          <td class="mini">${fmtDate(u.createdAt)}</td>
+          <td>
+            <button class="btn ghost sm" data-edit-user="${u.id}">تعديل</button>
+            <button class="btn ${u.status === 'blocked' ? 'gold' : 'danger'} sm" data-toggle-user="${u.id}">${u.status === 'blocked' ? 'تفعيل' : 'إيقاف'}</button>
+          </td>
+        </tr>`).join('') || '<tr><td colspan="6" class="empty">مفيش نتائج</td></tr>'}</tbody>
+      </table></div>
+    </div>`;
+}
+function bindUsers() {
+  const s = qs('#uSearch');
+  if (s) s.oninput = () => { S.search = s.value; render(); 
+    const el = qs('#uSearch'); el.focus(); el.setSelectionRange(el.value.length, el.value.length); };
+
+  qsa('[data-toggle-user]').forEach(b => b.onclick = async () => {
+    const u = S.users.find(x => x.id === b.dataset.toggleUser);
+    const block = u.status !== 'blocked';
+    if (!await confirmBox(block ? 'إيقاف الحساب' : 'تفعيل الحساب',
+      block ? 'هيتم منع الدخول فورًا. البيانات والاشتراك بيفضلوا محفوظين.' : 'الحساب هيرجع يدخل عادي.', block)) return;
+    await updateDoc(doc(db, 'users', u.id), { status: block ? 'blocked' : 'active', statusChangedAt: serverTimestamp() });
+    await audit(block ? 'user_blocked' : 'user_activated', u.id, u.name);
+    toast(block ? 'تم إيقاف الحساب' : 'تم تفعيل الحساب', 'ok');
+    await reload();
+  });
+
+  qsa('[data-edit-user]').forEach(b => b.onclick = () => editUser(b.dataset.editUser));
+}
+
+async function editUser(uid) {
+  const u = S.users.find(x => x.id === uid);
+  if (!u) return;
+  const ok = await modal(`تعديل: ${esc(u.name)}`, `
+    <label>الاسم<input id="euName" class="input" value="${esc(u.name || '')}" /></label>
+    <label>الموبايل<input id="euPhone" class="input" value="${esc(u.phone || '')}" /></label>
+    <label>الباقة
+      <select id="euPlan" class="input">
+        <option value="FREE" ${u.plan !== 'PRO' ? 'selected' : ''}>FREE</option>
+        <option value="PRO" ${u.plan === 'PRO' ? 'selected' : ''}>PRO</option>
+      </select>
+    </label>
+    <label>تاريخ انتهاء PRO (اتركه فاضي = مفتوح)
+      <input id="euExp" class="input" type="date" value="${u.planExpiresAt?.toDate ? u.planExpiresAt.toDate().toISOString().slice(0, 10) : ''}" />
+    </label>
+    <label>ملاحظة إدارية (تظهر للأدمن فقط)
+      <textarea id="euNote" class="input" rows="2">${esc(u.adminNote || '')}</textarea>
+    </label>
+    <p class="mini" style="margin-top:8px">أي تغيير هنا بيتسجل في سجل العمليات.</p>`,
+    [{ label: 'إلغاء', value: false }, { label: 'حفظ', value: true, cls: 'gold' }]);
+  if (!ok) return;
+  const payload = {
+    name: qs('#euName').value.trim().slice(0, 60),
+    phone: qs('#euPhone').value.replace(/[^\d]/g, ''),
+    plan: qs('#euPlan').value,
+    adminNote: qs('#euNote').value.trim().slice(0, 300),
+    updatedAt: serverTimestamp()
+  };
+  const expVal = qs('#euExp').value;
+  if (expVal) {
+    const dt = new Date(expVal + 'T23:59:59');
+    payload.planExpiresAt = Timestamp.fromDate(dt);
+    if (payload.plan === 'FREE') payload.plan = 'PRO';
+  } else if (payload.plan === 'PRO') {
+    payload.planExpiresAt = null;
+  }
+  await updateDoc(doc(db, 'users', uid), payload);
+  await audit('user_updated', uid, payload.name);
+  await notifyUser(uid, 'تم تحديث حسابك', 'الإدارة حدثت بيانات حسابك. راجع صفحة حسابي.');
+  toast('تم حفظ بيانات المستخدم', 'ok');
+  await reload();
+}
+
+/* ── الطلبات ── */
+function viewOrders() {
+  const filter = S.orderFilter || 'all';
+  const list = S.orders.filter(o => filter === 'all' || o.status === filter);
+  return `
+    <div class="page-head"><h2>إدارة الطلبات</h2><p>تأكيد الدفع بيفعّل الاشتراك تلقائيًا وبيبعت إشعار للمستخدم.</p></div>
+    <div class="panel">
+      <div class="row" style="margin:0 0 10px">
+        ${['all', 'pending', 'confirmed', 'delivered', 'rejected', 'cancelled'].map(k =>
+    `<button class="btn ${filter === k ? 'gold' : 'ghost'} sm" data-ofilter="${k}">${({
+      all: 'الكل', pending: 'بانتظار', confirmed: 'مؤكد', delivered: 'تم التنفيذ', rejected: 'مرفوض', cancelled: 'ملغي'
+    })[k]}</button>`).join('')}
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>العميل</th><th>الطلب</th><th>المبلغ</th><th>الحالة</th><th>التاريخ</th><th>إجراءات</th></tr></thead>
+        <tbody>${list.map(o => `<tr>
+          <td><b style="font-size:11.5px">${esc(o.userName || '—')}</b><div class="mini" style="direction:ltr;text-align:right">${esc(o.userPhone || '')}</div></td>
+          <td>${o.type === 'plan' ? '<span class="tag pend">اشتراك</span>' : '<span class="tag mut">خدمة</span>'}
+            <div class="mini">${(o.items || []).map(i => `${esc(i.name)}×${i.qty || 1}`).join(' + ')}</div>
+            ${o.note ? `<div class="mini" style="color:#c7b978">"${esc(o.note.slice(0, 80))}"</div>` : ''}</td>
+          <td style="color:#F5D778;font-family:Oxanium;font-size:11.5px">${money(o.total)}</td>
+          <td>${orderTag(o.status)}</td>
+          <td class="mini">${fmtDT(o.createdAt)}</td>
+          <td style="white-space:nowrap">
+            ${o.status === 'pending' ? `<button class="btn gold sm" data-approve="${o.id}">تأكيد</button>
+              <button class="btn danger sm" data-reject="${o.id}">رفض</button>` : ''}
+            ${o.status === 'confirmed' ? `<button class="btn ghost sm" data-deliver="${o.id}">تم التنفيذ</button>` : ''}
+            <button class="btn ghost sm" data-view-order="${o.id}">تفاصيل</button>
+          </td>
+        </tr>`).join('') || '<tr><td colspan="6" class="empty">مفيش طلبات في الفلتر ده</td></tr>'}</tbody>
+      </table></div>
+    </div>`;
+}
+function orderTag(s) {
+  const map = { pending: ['pend', 'بانتظار'], confirmed: ['ok', 'مؤكد'], delivered: ['ok', 'تم التنفيذ'], rejected: ['bad', 'مرفوض'], cancelled: ['mut', 'ملغي'] };
+  const [c, l] = map[s] || ['mut', s];
+  return `<span class="tag ${c}">${l}</span>`;
+}
+function bindOrders() {
+  qsa('[data-ofilter]').forEach(b => b.onclick = () => { S.orderFilter = b.dataset.ofilter; render(); });
+  qsa('[data-approve]').forEach(b => b.onclick = () => approveOrder(b.dataset.approve));
+  qsa('[data-reject]').forEach(b => b.onclick = () => rejectOrder(b.dataset.reject));
+  qsa('[data-deliver]').forEach(b => b.onclick = async () => {
+    await updateDoc(doc(db, 'orders', b.dataset.deliver), { status: 'delivered', updatedAt: serverTimestamp() });
+    await audit('order_delivered', b.dataset.deliver, '');
+    toast('تم تعليم الطلب كمُنفّذ', 'ok');
+    await reload();
+  });
+  qsa('[data-view-order]').forEach(b => b.onclick = () => viewOrderDetail(b.dataset.viewOrder));
+}
+
+async function approveOrder(id) {
+  const o = S.orders.find(x => x.id === id);
+  if (!o) return;
+  const ok = await modal('تأكيد الدفع', `
+    <p>هتأكد استلام <b>${money(o.total)}</b> من <b>${esc(o.userName)}</b>؟</p>
+    ${o.type === 'plan' ? `<p class="mini" style="margin-top:8px">هيتم تفعيل <b>${esc(o.items?.[0]?.name || 'PRO')}</b> لمدة <b>${o.items?.[0]?.days || 30}</b> يوم من الآن.</p>` : '<p class="mini" style="margin-top:8px">إتمام الخدمة هيتسجل، والمستخدم هيتشعر بالإشعار.</p>'}
+    <label style="margin-top:12px">ملاحظة للمستخدم (اختياري)<input id="apprNote" class="input" placeholder="مثلاً: تم استلام التحويل ✅" /></label>`,
+    [{ label: 'إلغاء', value: false }, { label: 'تأكيد الدفع', value: true, cls: 'gold' }]);
+  if (!ok) return;
+  const note = qs('#apprNote')?.value?.trim() || '';
+  const upd = { status: 'confirmed', adminNote: note, confirmedAt: serverTimestamp(), updatedAt: serverTimestamp() };
+
+  if (o.type === 'plan') {
+    const days = Number(o.items?.[0]?.days) || Number(S.plans?.pro?.days) || 30;
+    const uSnap = await getDoc(doc(db, 'users', o.userId));
+    const u = uSnap.exists() ? uSnap.data() : {};
+    let base = Date.now();
+    if (u.planExpiresAt?.toDate) {
+      const cur = u.planExpiresAt.toDate().getTime();
+      if (cur > base) base = cur;
+    }
+    upd.planExpiresAt = Timestamp.fromDate(new Date(base + days * 864e5));
+    await updateDoc(doc(db, 'users', o.userId), { plan: 'PRO', planExpiresAt: upd.planExpiresAt, updatedAt: serverTimestamp() });
+    await notifyUser(o.userId, 'تم تفعيل اشتراك PRO 💎', `اشتراكك اتفعل لحد ${fmtDate(upd.planExpiresAt)}. استمتع بكل الأدوات.`);
+  } else {
+    await notifyUser(o.userId, 'تم تأكيد طلبك ✅', `طلبك بقيمة ${money(o.total)} اتأكد. فريقنا هيتواصل معاك لتنفيذ الخدمة.`);
+  }
+  await updateDoc(doc(db, 'orders', id), upd);
+  await audit('order_approved', id, `${o.userName} — ${o.total}`);
+  toast('تم تأكيد الطلب وتفعيله', 'ok');
+  await reload();
+}
+
+async function rejectOrder(id) {
+  const ok = await modal('رفض الطلب', `<label>سبب الرفض (هيوصل للمستخدم)<input id="rejReason" class="input" placeholder="مثلاً: مفيش إثبات دفع" /></label>`,
+    [{ label: 'إلغاء', value: false }, { label: 'رفض', value: true, cls: 'danger' }]);
+  if (!ok) return;
+  const reason = qs('#rejReason')?.value?.trim() || 'تم رفض الطلب من الإدارة';
+  const o = S.orders.find(x => x.id === id);
+  await updateDoc(doc(db, 'orders', id), { status: 'rejected', adminNote: reason, updatedAt: serverTimestamp() });
+  if (o) await notifyUser(o.userId, 'طلبك اتـرفض', reason);
+  await audit('order_rejected', id, reason);
+  toast('تم رفض الطلب', 'ok');
+  await reload();
+}
+
+function viewOrderDetail(id) {
+  const o = S.orders.find(x => x.id === id);
+  if (!o) return;
+  modal(`الطلب ${id.slice(0, 8)}`, `
+    <p><b>العميل:</b> ${esc(o.userName)} — <span style="direction:ltr;display:inline-block">${esc(o.userPhone || '')}</span></p>
+    <p><b>النوع:</b> ${o.type === 'plan' ? 'اشتراك' : 'خدمة'}</p>
+    <p><b>الحالة:</b> ${orderTag(o.status)}</p>
+    <p><b>المبلغ:</b> ${money(o.total)}</p>
+    <p style="margin-top:10px"><b>العناصر:</b></p>
+    <ul style="font-size:12px;color:#b1ab9d;padding-inline-start:18px">${(o.items || []).map(i => `<li>${esc(i.name)} — ${money(i.price)} × ${i.qty || 1}</li>`).join('')}</ul>
+    ${o.note ? `<p style="margin-top:8px"><b>ملاحظة المستخدم:</b> ${esc(o.note)}</p>` : ''}
+    ${o.adminNote ? `<p style="margin-top:8px"><b>ملاحظة الإدارة:</b> ${esc(o.adminNote)}</p>` : ''}
+    <p class="mini" style="margin-top:12px">أُنشئ: ${fmtDT(o.createdAt)}</p>`);
+}
+
+/* ── المتجر ── */
+function viewProducts() {
+  return `
+    <div class="page-head"><h2>إدارة المتجر</h2><p>${num(S.products.length)} خدمة — الإظهار/الإخفاء بيتحكم في ظهورها للمستخدمين فورًا.</p></div>
+    <div class="panel">
+      <h3>إضافة خدمة جديدة</h3>
+      <div class="grid-2">
+        <label>اسم الخدمة<input id="npName" class="input" placeholder="مثلاً: تحليل فريق احترافي" /></label>
+        <label>السعر (ج.م)<input id="npPrice" class="input" type="number" min="0" step="1" placeholder="199" /></label>
+      </div>
+      <label>الوصف التفصيلي<textarea id="npDesc" class="input" rows="3" placeholder="الخدمة بتشمل إيه بالظبط..."></textarea></label>
+      <div class="grid-2">
+        <label>مميزات (كل ميزة في سطر)<textarea id="npFeatures" class="input" rows="3" placeholder="تقرير PDF&#10;مكالمة ٣٠ دقيقة"></textarea></label>
+        <label>رابط صورة الخدمة (اختياري)<input id="npImage" class="input" placeholder="images/service-analysis.jpg أو رابط https" /></label>
+      </div>
+      <div class="row"><button class="btn gold" id="addProductBtn">إضافة الخدمة</button></div>
+    </div>
+
+    <div class="panel">
+      <h3>الخدمات الحالية</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th></th><th>الخدمة</th><th>السعر</th><th>الظهور</th><th>الترتيب</th><th>إجراءات</th></tr></thead>
+        <tbody>${S.products.map(p => `<tr>
+          <td>${p.image ? `<img class="prod-mini" src="${esc(p.image)}" alt="" onerror="this.style.display='none'">` : '<div class="prod-mini" style="display:grid;place-items:center;font-size:16px">🛍️</div>'}</td>
+          <td><b style="font-size:11.5px">${esc(p.name)}</b><div class="mini">${esc((p.desc || '').slice(0, 70))}</div></td>
+          <td style="color:#F5D778;font-family:Oxanium">${money(p.price)}</td>
+          <td><input type="checkbox" class="switch" data-vis="${p.id}" ${p.visible !== false ? 'checked' : ''} /></td>
+          <td class="mini">${p.sort ?? '—'}</td>
+          <td><button class="btn ghost sm" data-edit-prod="${p.id}">تعديل</button>
+              <button class="btn danger sm" data-del-prod="${p.id}">حذف</button></td>
+        </tr>`).join('') || '<tr><td colspan="6" class="empty">المتجر فاضي — أضف أول خدمة فوق</td></tr>'}</tbody>
+      </table></div>
+    </div>`;
+}
+function bindProducts() {
+  qs('#addProductBtn').onclick = async () => {
+    const name = qs('#npName').value.trim();
+    const price = Number(qs('#npPrice').value) || 0;
+    const desc = qs('#npDesc').value.trim();
+    if (name.length < 2) return toast('اسم الخدمة مطلوب', 'err');
+    if (price < 0) return toast('السعر غير صحيح', 'err');
+    const features = qs('#npFeatures').value.split('\n').map(s => s.trim()).filter(Boolean).slice(0, 10);
+    const image = qs('#npImage').value.trim();
+    await addDoc(collection(db, 'products'), {
+      name, price, desc, features, image,
+      visible: true, sort: S.products.length + 1,
+      createdAt: serverTimestamp(), createdBy: S.me.uid
+    });
+    await audit('product_added', '', name);
+    toast('تمت إضافة الخدمة ✅', 'ok');
+    await reload();
+  };
+  qsa('[data-vis]').forEach(cb => cb.onchange = async () => {
+    await updateDoc(doc(db, 'products', cb.dataset.vis), { visible: cb.checked });
+    await audit('product_visibility', cb.dataset.vis, cb.checked ? 'ظاهر' : 'مخفي');
+    toast(cb.checked ? 'الخدمة ظاهرة' : 'الخدمة مخفية', 'ok');
+  });
+  qsa('[data-edit-prod]').forEach(b => b.onclick = () => editProduct(b.dataset.editProd));
+  qsa('[data-del-prod]').forEach(b => b.onclick = async () => {
+    const p = S.products.find(x => x.id === b.dataset.delProd);
+    if (!await confirmBox('حذف الخدمة', `هتحذف "${esc(p.name)}" نهائيًا. الطلبات القديمة بتفضل زي ما هي.`, true)) return;
+    await deleteDoc(doc(db, 'products', b.dataset.delProd));
+    await audit('product_deleted', b.dataset.delProd, p.name);
+    toast('تم الحذف', 'ok');
+    await reload();
+  });
+}
+async function editProduct(id) {
+  const p = S.products.find(x => x.id === id);
+  if (!p) return;
+  const ok = await modal('تعديل الخدمة', `
+    <label>الاسم<input id="epName" class="input" value="${esc(p.name)}" /></label>
+    <label>السعر<input id="epPrice" class="input" type="number" value="${p.price || 0}" /></label>
+    <label>الوصف<textarea id="epDesc" class="input" rows="3">${esc(p.desc || '')}</textarea></label>
+    <label>المميزات (سطر لكل ميزة)<textarea id="epFeatures" class="input" rows="3">${esc((p.features || []).join('\n'))}</textarea></label>
+    <label>الصورة<input id="epImage" class="input" value="${esc(p.image || '')}" /></label>
+    <label>الترتيب<input id="epSort" class="input" type="number" value="${p.sort ?? 1}" /></label>`,
+    [{ label: 'إلغاء', value: false }, { label: 'حفظ', value: true, cls: 'gold' }]);
+  if (!ok) return;
+  await updateDoc(doc(db, 'products', id), {
+    name: qs('#epName').value.trim().slice(0, 80),
+    price: Number(qs('#epPrice').value) || 0,
+    desc: qs('#epDesc').value.trim().slice(0, 2000),
+    features: qs('#epFeatures').value.split('\n').map(s => s.trim()).filter(Boolean).slice(0, 10),
+    image: qs('#epImage').value.trim(),
+    sort: Number(qs('#epSort').value) || 1,
+    updatedAt: serverTimestamp()
+  });
+  await audit('product_updated', id, qs('#epName').value);
+  toast('تم التحديث', 'ok');
+  await reload();
+}
+
+/* ── الاشتراكات ── */
+function viewPlans() {
+  const pro = S.plans.pro || { name: 'PRO', price: 149, days: 30, tagline: 'الأدوات الكاملة', perks: [] };
+  const free = S.plans.free || { name: 'FREE', price: 0, days: 0, tagline: 'ابدأ من هنا', perks: [] };
+  return `
+    <div class="page-head"><h2>باقات الاشتراك</h2><p>تعديل السعر والمدة والمميزات — بيتطبق فورًا على صفحة الاشتراكات.</p></div>
+    <div class="panel">
+      <h3>باقة PRO</h3>
+      <div class="grid-3">
+        <label>السعر (ج.م)<input id="plPrice" class="input" type="number" min="0" value="${pro.price}" /></label>
+        <label>المدة (يوم)<input id="plDays" class="input" type="number" min="1" value="${pro.days}" /></label>
+        <label>العنوان الفرعي<input id="plTag" class="input" value="${esc(pro.tagline || '')}" /></label>
+      </div>
+      <label>المميزات (سطر لكل ميزة)<textarea id="plPerks" class="input" rows="5">${esc((pro.perks || []).join('\n'))}</textarea></label>
+      <div class="row"><button class="btn gold" id="saveProPlan">حفظ باقة PRO</button></div>
+    </div>
+    <div class="panel">
+      <h3>باقة FREE</h3>
+      <label>المميزات (سطر لكل ميزة)<textarea id="plFreePerks" class="input" rows="4">${esc((free.perks || []).join('\n'))}</textarea></label>
+      <div class="row"><button class="btn ghost" id="saveFreePlan">حفظ باقة FREE</button></div>
+    </div>
+    <div class="panel">
+      <h3>حدود الذكاء الاصطناعي اليومية</h3>
+      <div class="grid-2">
+        <label>FREE — تحليلات/يوم<input id="limFA" class="input" type="number" min="0" value="${S.config.aiLimits?.freeDailyAnalyze ?? 3}" /></label>
+        <label>FREE — رسائل مساعد/يوم<input id="limFC" class="input" type="number" min="0" value="${S.config.aiLimits?.freeDailyChat ?? 3}" /></label>
+        <label>PRO — تحليلات/يوم<input id="limPA" class="input" type="number" min="0" value="${S.config.aiLimits?.proDailyAnalyze ?? 40}" /></label>
+        <label>PRO — رسائل مساعد/يوم<input id="limPC" class="input" type="number" min="0" value="${S.config.aiLimits?.proDailyChat ?? 120}" /></label>
+      </div>
+      <div class="row"><button class="btn gold" id="saveLimits">حفظ الحدود</button></div>
+    </div>`;
+}
+function bindPlans() {
+  qs('#saveProPlan').onclick = async () => {
+    const pro = {
+      id: 'pro', name: 'PRO',
+      price: clampNum(qs('#plPrice').value, 0, 100000),
+      days: clampNum(qs('#plDays').value, 1, 3650),
+      tagline: qs('#plTag').value.trim().slice(0, 80),
+      perks: qs('#plPerks').value.split('\n').map(s => s.trim()).filter(Boolean).slice(0, 12)
+    };
+    const free = S.plans.free || { id: 'free', name: 'FREE', price: 0, days: 0 };
+    await setDoc(doc(db, 'config', 'plans'), { free, pro }, { merge: true });
+    await audit('plans_updated', 'pro', `${pro.price} / ${pro.days} يوم`);
+    toast('تم حفظ باقة PRO', 'ok');
+    await reload();
+  };
+  qs('#saveFreePlan').onclick = async () => {
+    const free = { id: 'free', name: 'FREE', price: 0, days: 0, tagline: 'ابدأ من هنا', perks: qs('#plFreePerks').value.split('\n').map(s => s.trim()).filter(Boolean).slice(0, 12) };
+    const pro = S.plans.pro || { id: 'pro', name: 'PRO', price: 149, days: 30, perks: [] };
+    await setDoc(doc(db, 'config', 'plans'), { free, pro }, { merge: true });
+    await audit('plans_updated', 'free', '');
+    toast('تم حفظ باقة FREE', 'ok');
+    await reload();
+  };
+  qs('#saveLimits').onclick = async () => {
+    await setDoc(doc(db, 'config', 'main'), {
+      aiLimits: {
+        freeDailyAnalyze: clampNum(qs('#limFA').value, 0, 500),
+        freeDailyChat: clampNum(qs('#limFC').value, 0, 500),
+        proDailyAnalyze: clampNum(qs('#limPA').value, 0, 2000),
+        proDailyChat: clampNum(qs('#limPC').value, 0, 2000)
+      }
+    }, { merge: true });
+    await audit('ai_limits_updated', '', '');
+    toast('تم حفظ الحدود', 'ok');
+    await reload();
+  };
+}
+
+/* ── اللاعبين ── */
+function viewPlayers() {
+  const t = lc(S.search);
+  const rows = S.players.filter(p => !t || lc(`${p.name} ${(p.positions || []).join(' ')}`).includes(t)).slice(0, 200);
+  return `
+    <div class="page-head"><h2>قاعدة اللاعبين</h2><p>${num(S.players.length)} لاعب — هي اللي بتيظهر في Team Builder. مفيش أرقام مخترعة: أي تقييم بتضيفه هو مصدره انت.</p></div>
+    <div class="panel">
+      <h3>إضافة لاعب</h3>
+      <div class="grid-3">
+        <label>الاسم<input id="nplName" class="input" placeholder="Messi" /></label>
+        <label>التقييم<input id="nplRating" class="input" type="number" min="1" max="110" placeholder="95" /></label>
+        <label>المراكز (بفاصلة)<input id="nplPos" class="input" placeholder="RW,ST,AMF" /></label>
+      </div>
+      <div class="row"><button class="btn gold" id="addPlayerBtn">إضافة اللاعب</button>
+      <button class="btn ghost" id="bulkToggle">إضافة دفعة (CSV)</button></div>
+      <div id="bulkBox" class="hidden" style="margin-top:12px">
+        <label>سطر لكل لاعب: الاسم,التقييم,المراكز
+          <textarea id="bulkCsv" class="input" rows="5" placeholder="Messi,95,RW ST AMF&#10;Rodri,90,DM CM"></textarea>
+        </label>
+        <button class="btn gold sm" id="bulkAdd">استيراد</button>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="search"><input id="pSearch" class="input" placeholder="ابحث بالاسم أو المركز" value="${esc(S.search)}" /></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>اللاعب</th><th>التقييم</th><th>المراكز</th><th>إجراءات</th></tr></thead>
+        <tbody>${rows.map(p => `<tr>
+          <td><b style="font-size:11.5px">${esc(p.name)}</b></td>
+          <td style="font-family:Oxanium;color:#F5D778">${p.rating || '—'}</td>
+          <td class="mini">${esc((p.positions || []).join(' · '))}</td>
+          <td><button class="btn danger sm" data-del-player="${p.id}">حذف</button></td>
+        </tr>`).join('') || '<tr><td colspan="4" class="empty">مفيش لاعبين — ضيف من فوق أو استورد CSV</td></tr>'}</tbody>
+      </table></div>
+    </div>`;
+}
+function bindPlayers() {
+  const s = qs('#pSearch');
+  if (s) s.oninput = () => { S.search = s.value; render(); const el = qs('#pSearch'); el.focus(); el.setSelectionRange(el.value.length, el.value.length); };
+  qs('#addPlayerBtn').onclick = async () => {
+    const name = qs('#nplName').value.trim();
+    const rating = clampNum(qs('#nplRating').value, 1, 110);
+    const positions = qs('#nplPos').value.split(/[,،\s]+/).map(x => x.trim().toUpperCase()).filter(Boolean).slice(0, 6);
+    if (name.length < 2) return toast('اسم اللاعب مطلوب', 'err');
+    await addDoc(collection(db, 'players'), { name, rating: rating || null, positions, createdAt: serverTimestamp() });
+    await audit('player_added', '', name);
+    toast('تمت إضافة اللاعب', 'ok');
+    S.search = '';
+    await reload();
+  };
+  qs('#bulkToggle').onclick = () => qs('#bulkBox').classList.toggle('hidden');
+  qs('#bulkAdd').onclick = async () => {
+    const lines = qs('#bulkCsv').value.split('\n').map(l => l.trim()).filter(Boolean);
+    if (!lines.length) return toast('مفيش بيانات', 'err');
+    const btn = qs('#bulkAdd'); btn.disabled = true;
+    let added = 0;
+    for (const l of lines.slice(0, 500)) {
+      const [name, rating, pos] = l.split(',').map(x => (x || '').trim());
+      if (!name) continue;
+      await addDoc(collection(db, 'players'), {
+        name: name.slice(0, 40),
+        rating: rating ? clampNum(rating, 1, 110) : null,
+        positions: (pos || '').split(/\s+/).map(x => x.toUpperCase()).filter(Boolean).slice(0, 6),
+        createdAt: serverTimestamp()
+      });
+      added++;
+    }
+    await audit('players_bulk_import', '', `${added} لاعب`);
+    toast(`تم استيراد ${added} لاعب`, 'ok');
+    btn.disabled = false;
+    S.search = '';
+    await reload();
+  };
+  qsa('[data-del-player]').forEach(b => b.onclick = async () => {
+    if (!await confirmBox('حذف اللاعب', 'هيختفي من قاعدة الباني.', true)) return;
+    await deleteDoc(doc(db, 'players', b.dataset.delPlayer));
+    toast('تم الحذف', 'ok');
+    await reload();
+  });
+}
+
+/* ── الإشعارات ── */
+function viewNotifs() {
+  return `
+    <div class="page-head"><h2>إرسال إشعارات</h2><p>رسالة مباشرة لمستخدم واحد أو للكل — بتظهر في جرس الإشعارات فورًا.</p></div>
+    <div class="panel">
+      <h3>إشعار جديد</h3>
+      <label>المستهدف
+        <select id="nfTarget" class="input">
+          <option value="all">كل المستخدمين (${S.users.length})</option>
+          ${S.users.slice(0, 200).map(u => `<option value="${u.id}">${esc(u.name)} — ${esc(u.phone || u.email || '')}</option>`).join('')}
+        </select>
+      </label>
+      <label>العنوان<input id="nfTitle" class="input" placeholder="مثلاً: تحديث جديد في المنصة" /></label>
+      <label>النص<textarea id="nfBody" class="input" rows="3" placeholder="اكتب الرسالة..."></textarea></label>
+      <label>النوع
+        <select id="nfType" class="input">
+          <option value="update">تحديث المنصة</option>
+          <option value="admin">رسالة إدارة</option>
+          <option value="subscription">اشتراك</option>
+          <option value="order">طلب</option>
+          <option value="ai">AI</option>
+        </select>
+      </label>
+      <div class="row"><button class="btn gold" id="sendNotifBtn">إرسال</button></div>
+      <p class="mini" style="margin-top:8px">الإرسال للكل بيكتب إشعار في مستند كل مستخدم — بياخد لحظات حسب العدد.</p>
+    </div>`;
+}
+function bindNotifs() {
+  qs('#sendNotifBtn').onclick = async () => {
+    const target = qs('#nfTarget').value;
+    const title = qs('#nfTitle').value.trim();
+    const body = qs('#nfBody').value.trim();
+    const type = qs('#nfType').value;
+    if (title.length < 3) return toast('العنوان قصير', 'err');
+    if (body.length < 3) return toast('النص قصير', 'err');
+    const btn = qs('#sendNotifBtn'); btn.disabled = true; btn.textContent = 'بيبعت…';
+    const ids = target === 'all' ? S.users.map(u => u.id) : [target];
+    let sent = 0;
+    for (const uid of ids) {
+      try {
+        await addDoc(collection(db, 'users', uid, 'notifications'), {
+          type, title: title.slice(0, 90), body: body.slice(0, 500),
+          read: false, createdAt: serverTimestamp(), fromAdmin: true
+        });
+        sent++;
+      } catch {}
+    }
+    await audit('notification_sent', target === 'all' ? 'all' : target, `${title} (${sent})`);
+    toast(`تم إرسال ${sent} إشعار`, 'ok');
+    btn.disabled = false; btn.textContent = 'إرسال';
+    qs('#nfTitle').value = ''; qs('#nfBody').value = '';
+  };
+}
+
+/* ── تقارير AI ── */
+function viewAi() {
+  const usersWithUsage = S.users.filter(u => (u.usage?.aiCount || 0) + (u.usage?.chatCount || 0) > 0);
+  const totalAi = S.users.reduce((a, u) => a + (u.usage?.aiCount || 0), 0);
+  const totalChat = S.users.reduce((a, u) => a + (u.usage?.chatCount || 0), 0);
+  return `
+    <div class="page-head"><h2>تقارير استخدام الذكاء الاصطناعي</h2><p>الأرقام دي من usage المحفوظ لكل مستخدم — تقدير استخدام وليس فاتورة.</p></div>
+    <div class="kpis">
+      <div class="kpi"><span>تحليلات اليوم</span><b>${num(totalAi)}</b><small>مجموع عدادات المستخدمين</small></div>
+      <div class="kpi"><span>رسائل المساعد</span><b>${num(totalChat)}</b><small>مجموع عدادات المستخدمين</small></div>
+      <div class="kpi"><span>مستخدمين نشطين في AI</span><b>${num(usersWithUsage.length)}</b><small>${S.users.length ? Math.round(usersWithUsage.length / S.users.length * 100) : 0}%</small></div>
+      <div class="kpi"><span>الحصة اليومية</span><b>${num((S.config.aiLimits?.freeDailyAnalyze ?? 3))}</b><small>FREE — تحليلات</small></div>
+    </div>
+    <div class="panel">
+      <h3>الاستخدام حسب المستخدم</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>المستخدم</th><th>الباقة</th><th>تحليلات</th><th>رسائل</th><th>آخر تحديث</th></tr></thead>
+        <tbody>${S.users.slice().sort((a, b) => (b.usage?.aiCount || 0) - (a.usage?.aiCount || 0)).slice(0, 50).map(u => `<tr>
+          <td>${esc(u.name || '—')}<div class="mini">${esc(u.email || u.phone || '')}</div></td>
+          <td><span class="tag ${currentPlan(u) === 'PRO' ? 'ok' : 'mut'}">${currentPlan(u)}</span></td>
+          <td style="font-family:Oxanium">${num(u.usage?.aiCount || 0)}</td>
+          <td style="font-family:Oxanium">${num(u.usage?.chatCount || 0)}</td>
+          <td class="mini">${esc(u.usage?.aiDayKey || '—')}</td>
+        </tr>`).join('') || '<tr><td colspan="5" class="empty">مفيش استخدام مسجل</td></tr>'}</tbody>
+      </table></div>
+    </div>`;
+}
+
+/* ── الإعدادات ── */
+function viewSettings() {
+  const c = S.config;
+  return `
+    <div class="page-head"><h2>إعدادات المنصة</h2><p>بتتحكم في التواصل والموديل وبيانات الدفع — مفيش أي مفتاح سري هنا.</p></div>
+    <div class="panel">
+      <h3>التواصل الاجتماعي</h3>
+      <div class="grid-2">
+        <label>رقم واتساب (دولي بدون +)<input id="cfgWa" class="input" placeholder="201012345678" value="${esc(c.whatsapp || '')}" /></label>
+        <label>رابط تليجرام<input id="cfgTg" class="input" placeholder="https://t.me/username" value="${esc(c.telegram || '')}" /></label>
+      </div>
+      <p class="mini">الواتساب بيتحول لرابط wa.me مباشر. التليجرام لازم يبدأ بـ t.me أو telegram.me. لو فاضي، الأيقونة بتختفي (بدل ما تبقى زرار وهمي).</p>
+      <div class="row"><button class="btn gold" id="saveSocial">حفظ</button></div>
+    </div>
+    <div class="panel">
+      <h3>الدفع والموديل</h3>
+      <div class="grid-2">
+        <label>طرق الدفع الظاهرة<input id="cfgPay" class="input" value="${esc(c.paymentMethods || 'فودافون كاش / إنستاباي')}" /></label>
+        <label>رقم استلام المدفوعات<input id="cfgPayPhone" class="input" value="${esc(c.paymentPhone || '')}" placeholder="اختياري" /></label>
+        <label>موديل Gemini<input id="cfgModel" class="input" value="${esc(c.geminiModel || 'gemini-2.5-flash')}" /></label>
+        <label>بريد الأدمن (للتحقق)<input id="cfgAdminEmail" class="input" value="${esc(c.adminEmail || '')}" /></label>
+      </div>
+      <div class="row"><button class="btn gold" id="savePay">حفظ</button></div>
+    </div>
+    <div class="panel">
+      <h3>حالة المشروع</h3>
+      <p class="mini">المستخدمين: ${num(S.users.length)} · الطلبات: ${num(S.orders.length)} · الخدمات: ${num(S.products.length)} · اللاعبين: ${num(S.players.length)}</p>
+      <p class="mini" style="margin-top:6px">الحساب الإداري: <b style="color:#F5D778">${esc(S.profile?.email || '')}</b> — الصلاحية مخزنة في users/${S.me?.uid?.slice(0, 8)}… role=admin</p>
+    </div>`;
+}
+function bindSettings() {
+  qs('#saveSocial').onclick = async () => {
+    const wa = qs('#cfgWa').value.replace(/[^\d]/g, '');
+    const tg = qs('#cfgTg').value.trim();
+    if (tg && !/^(https?:\/\/)?(t\.me|telegram\.me)\//i.test(tg)) return toast('رابط تليجرام لازم يكون t.me/username', 'err');
+    await setDoc(doc(db, 'config', 'main'), { whatsapp: wa, telegram: tg }, { merge: true });
+    await audit('config_social_updated', '', wa ? 'wa=' + wa : 'wa=—');
+    toast('تم حفظ بيانات التواصل', 'ok');
+    await reload();
+  };
+  qs('#savePay').onclick = async () => {
+    await setDoc(doc(db, 'config', 'main'), {
+      paymentMethods: qs('#cfgPay').value.trim().slice(0, 120),
+      paymentPhone: qs('#cfgPayPhone').value.trim().slice(0, 40),
+      geminiModel: qs('#cfgModel').value.trim().slice(0, 60) || 'gemini-2.5-flash',
+      adminEmail: qs('#cfgAdminEmail').value.trim().slice(0, 80)
+    }, { merge: true });
+    await audit('config_payment_updated', '', '');
+    toast('تم الحفظ', 'ok');
+    await reload();
+  };
+}
+
+/* ── سجل العمليات ── */
+function viewAudit() {
+  return `
+    <div class="page-head"><h2>سجل العمليات الإدارية</h2><p>كل إجراء حساس بيتسجل: مين عمله وإمتى — ${num(S.logs.length)} عملية.</p></div>
+    <div class="panel">
+      <div class="table-wrap"><table>
+        <thead><tr><th>الوقت</th><th>الإجراء</th><th>الهدف</th><th>تفاصيل</th><th>البريد</th></tr></thead>
+        <tbody>${S.logs.map(l => `<tr>
+          <td class="mini">${fmtDT(l.at)}</td>
+          <td><span class="tag ${String(l.action).includes('fail') ? 'bad' : 'mut'}">${esc(l.action)}</span></td>
+          <td class="mini" style="direction:ltr;text-align:right">${esc(String(l.target || '').slice(0, 14))}</td>
+          <td class="mini">${esc(l.details || l.reason || '')}</td>
+          <td class="mini">${esc(l.email || '')}</td>
+        </tr>`).join('') || '<tr><td colspan="5" class="empty">مفيش سجلات لسه</td></tr>'}</tbody>
+      </table></div>
+    </div>`;
+}
+
+/* ═══════════════ أدوات مساعدة ═══════════════ */
+async function audit(action, target, details) {
+  try {
+    await addDoc(collection(db, 'adminAudit'), {
+      action, target: String(target || ''), details: String(details || '').slice(0, 200),
+      adminUid: S.me.uid, email: S.profile?.email || S.me.email || '', at: serverTimestamp()
+    });
+  } catch (e) { console.warn('audit failed', e); }
+}
+async function notifyUser(uid, title, body, type = 'admin') {
+  try {
+    await addDoc(collection(db, 'users', uid, 'notifications'), {
+      type, title, body, read: false, createdAt: serverTimestamp(), fromAdmin: true
+    });
+  } catch (e) { console.warn('notify failed', e); }
+}
+
+/* إعداد أولي لو مفيش مشروع */
+if (!CONFIGURED) {
+  qs('#loginWrap').innerHTML = `<div class="login-card" style="text-align:center">
+    <img src="images/icon.png" alt="" class="login-logo" />
+    <h1>PES AI PRO — ADMIN</h1>
+    <p style="font-size:12.5px;color:#b1ab9d;margin-top:14px;line-height:1.9">
+      لوحة التحكم محتاجة ربط مشروع Firebase.<br>
+      افتح <b style="color:#F5D778">FIREBASE-SETUP.md</b> وحط الإعدادات في <b>admin.js</b> و<b>app.js</b>.
+    </p></div>`;
+  qs('#adminLogin').style.display = 'none';
+}
