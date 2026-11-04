@@ -1,0 +1,22 @@
+{
+  "name": "pes-ai-pro",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PES AI PRO — AI platform for eFootball players. Black & gold, Arabic RTL, Firebase-powered.",
+  "scripts": {
+    "bundle:firebase": "node build.mjs",
+    "dev": "node build.mjs --watch",
+    "test": "node tests/run-e2e.mjs && node tests/run-admin-e2e.mjs",
+    "serve": "npx --yes serve . -l 3000"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "firebase": "11.10.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "jsdom": "^30.1.3"
+  }
+}

@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#080808" />
+<title>PES AI PRO — YOUR TEAM. YOUR POWER. YOUR AI.</title>
+<meta name="description" content="منصة الذكاء الاصطناعي الاحترافية لعشاق eFootball: تحليل الفرق والتشكيلات، مساعد ذكي، متجر خدمات، واشتراكات." />
+<link rel="icon" href="images/icon.png" />
+<link rel="apple-touch-icon" href="images/icon.png" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Almarai:wght@300;400;700;800&family=Oxanium:wght@400;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<!-- ══════════ الخلفية العائمة ══════════ -->
+<div class="bg-layer" aria-hidden="true">
+  <div class="bg-image" id="bgImage"></div>
+  <div class="bg-vignette"></div>
+  <div class="bg-glow g1"></div>
+  <div class="bg-glow g2"></div>
+  <div class="bg-grid"></div>
+</div>
+
+<!-- ══════════ Splash Screen ══════════ -->
+<div id="splash" class="splash" hidden>
+  <div class="splash-photo" id="splashPhoto"></div>
+  <div class="splash-veil"></div>
+  <div class="splash-inner">
+    <div class="splash-ring"></div>
+    <img class="splash-logo" src="images/icon.png" alt="PES AI PRO" />
+    <h1 class="splash-name" data-text="PES AI PRO">PES AI PRO</h1>
+    <p class="splash-tag">YOUR TEAM. YOUR POWER. YOUR AI.</p>
+    <div class="splash-bar"><i></i></div>
+    <button class="skip-btn" id="skipSplash" type="button">تخطي المقدمة</button>
+  </div>
+</div>
+
+<!-- ══════════ شاشة الإعداد الناقص ══════════ -->
+<div id="setupScreen" class="setup-screen" hidden>
+  <div class="setup-card">
+    <img src="images/icon.png" alt="PES AI PRO" class="setup-logo" />
+    <h2>المنصة جاهزة — محتاجة ربط Firebase</h2>
+    <p>الكود كامل وشغال، بس لسه محتاج مفاتيح مشروع Firebase بتاعك عشان تسجيل الدخول وقاعدة البيانات والذكاء الاصطناعي يشتغلوا فعليًا.</p>
+    <ol class="setup-steps">
+      <li>افتح <b>FIREBASE-SETUP.md</b> في المشروع واتبع الخطوات (٥ دقايق).</li>
+      <li>الصق إعدادات المشروع في أعلى ملف <b>app.js</b> داخل <code>FIREBASE_CONFIG</code>.</li>
+      <li>أعد تحميل الصفحة — كل شيء هيشتغل حقيقي بدون أي تعديل تاني.</li>
+    </ol>
+    <div class="setup-note">مفيش أي زر وهمي في المنصة: لحد ما يتم الربط، الشاشات بتقولك الحقيقة بدل ما توهمك إنها شغالة.</div>
+  </div>
+</div>
+
+<!-- ══════════ الهيدر ══════════ -->
+<header class="topbar" id="topbar" hidden>
+  <button class="brand" data-nav="home" type="button" aria-label="الرئيسية">
+    <img src="images/icon.png" alt="" />
+    <span class="brand-text"><b>PES AI</b><i>PRO</i></span>
+  </button>
+  <div class="top-actions">
+    <button class="icon-btn" id="bellBtn" type="button" aria-label="الإشعارات">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+      <span class="bell-dot" id="bellDot" hidden></span>
+    </button>
+    <button class="avatar-btn" id="avatarBtn" type="button" aria-label="حسابي">
+      <span id="avatarInitial">؟</span>
+    </button>
+  </div>
+</header>
+
+<div class="plan-chip" id="planChip" hidden></div>
+
+<!-- ══════════ المحتوى ══════════ -->
+<main id="main" hidden>
+
+  <!-- ───── الرئيسية ───── -->
+  <section class="view" data-view="home" id="view-home">
+    <div class="hero">
+      <div class="hero-photo" id="heroPhoto" aria-hidden="true"></div>
+      <div class="hero-copy">
+        <span class="kicker">YOUR TEAM. YOUR POWER. YOUR AI.</span>
+        <h1>أهلاً <span id="helloName">يا نجم</span> 👋</h1>
+        <p>حلّل تشكيلتك بالذكاء الاصطناعي، ابنِ فريق أحلامك، وخُد نصائح تكتيكية بالمصري — كله في مكان واحد.</p>
+        <div class="hero-cta">
+          <button class="btn gold" data-nav="analyzer" type="button">حلّل تشكيلتك الآن</button>
+          <button class="btn ghost" data-nav="builder" type="button">ابنِ فريقك</button>
+        </div>
+      </div>
+      <div class="hero-stats">
+        <div class="hstat"><b id="statAi">0</b><span>تحليل ذكي</span></div>
+        <div class="hstat"><b id="statTeams">0</b><span>تشكيلة محفوظة</span></div>
+        <div class="hstat"><b id="statMatches">0</b><span>مباراة مسجلة</span></div>
+      </div>
+    </div>
+
+    <h2 class="sec-title">الخدمات <span>FEATURES</span></h2>
+    <div class="cards" id="homeCards"></div>
+
+    <h2 class="sec-title">روابط سريعة <span>QUICK</span></h2>
+    <div class="quick-rows">
+      <button class="quick-row" data-nav="builder" type="button"><span>🧩</span><div><b>TEAM BUILDER</b><i>ابنِ وقارن تشكيلاتك</i></div><em>›</em></button>
+      <button class="quick-row" data-nav="matches" type="button"><span>📊</span><div><b>MATCH ANALYSIS</b><i>سجّل نتائجك وحلّل أداءك</i></div><em>›</em></button>
+      <button class="quick-row" data-nav="orders" type="button"><span>🧾</span><div><b>طلباتي</b><i>تابع حالة طلباتك</i></div><em>›</em></button>
+      <button class="quick-row" data-nav="legal" type="button"><span>⚖️</span><div><b>الشروط والخصوصية</b><i>اقرأ قبل استخدام الأدوات</i></div><em>›</em></button>
+    </div>
+
+    <footer class="site-foot">
+      <div class="social">
+        <a class="social-btn" id="waBtn" hidden aria-label="واتساب">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm5.3 14.2c-.2.6-1.2 1.2-1.7 1.2-.4 0-1 .1-3.2-.9s-3.7-3.4-3.8-3.6c-.1-.2-.9-1.3-.9-2.4s.6-1.7.8-1.9c.2-.2.4-.3.6-.3h.4c.2 0 .4 0 .5.4l.7 1.7c.1.2.1.4 0 .6l-.4.5c-.1.2-.3.3-.1.6.2.3.8 1.3 1.7 2.1.9.8 1.7 1 2 1.1.2.1.4.1.6-.1l.7-.8c.2-.2.4-.1.6 0l1.6.8c.2.1.4.2.4.3.1.1.1.5-.1 1Z"/></svg>
+        </a>
+        <a class="social-btn" id="tgBtn" hidden aria-label="تليجرام">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M21.9 4.3 18.7 19c-.2 1-.9 1.3-1.7.8l-4.6-3.4-2.2 2.1c-.3.3-.5.5-1 .5l.3-4.2 7.7-7c.3-.3 0-.5-.5-.2L7.3 13.4 3.2 12c-1-.3-1-1 .2-1.4l17.1-6.6c.8-.3 1.5.2 1.4 1.2Z"/></svg>
+        </a>
+      </div>
+      <p>PES AI PRO — منصة مستقلة لعشاق eFootball. غير تابعة لـ KONAMI ولا مرتبطة بها رسميًا.</p>
+    </footer>
+  </section>
+
+  <!-- ───── تحليل الفريق ───── -->
+  <section class="view" data-view="analyzer" id="view-analyzer" hidden>
+    <div class="page-head">
+      <h1>AI TEAM ANALYZER</h1>
+      <p>ارفع صورة تشكيلتك من eFootball — الذكاء الاصطناعي يقرأها، وانت تأكد الأسماء قبل التحليل.</p>
+    </div>
+
+    <div class="panel" id="analyzerUpload">
+      <div class="drop-zone" id="dropZone" tabindex="0" role="button" aria-label="ارفع صورة التشكيلة">
+        <input type="file" id="teamImage" accept="image/*" hidden />
+        <div class="dz-icon">📸</div>
+        <b>اسحب صورة التشكيلة هنا أو اضغط للاختيار</b>
+        <span>JPG / PNG — يتم تحليل الصورة على جهازك وقواعد Firebase فقط</span>
+        <img id="dzPreview" alt="معاينة" hidden />
+      </div>
+      <div class="row-actions">
+        <button class="btn gold" id="analyzeBtn" type="button" disabled>ابدأ قراءة الصورة</button>
+        <button class="btn ghost" id="clearAnalyzer" type="button">مسح</button>
+      </div>
+      <div class="quota-line" id="aiQuotaLine"></div>
+    </div>
+
+    <div class="panel" id="readbackPanel" hidden>
+      <h3>اقرأ وأكّد اللي فهمناه <small>الأسماء اللي عليها ثقة منخفضة محتاجة تأكيدك</small></h3>
+      <div id="readbackList" class="readback-list"></div>
+      <div class="row-actions">
+        <button class="btn gold" id="confirmNamesBtn" type="button">التحليل الكامل</button>
+        <button class="btn ghost" id="resetAnalyzer" type="button">البدء من جديد</button>
+      </div>
+    </div>
+
+    <div class="panel result" id="analyzerResult" hidden></div>
+
+    <div class="panel" id="analyzerHistoryPanel" hidden>
+      <h3>تحليلاتك السابقة</h3>
+      <div id="analyzerHistory" class="list"></div>
+    </div>
+  </section>
+
+  <!-- ───── المساعد الذكي ───── -->
+  <section class="view" data-view="assistant" id="view-assistant" hidden>
+    <div class="page-head">
+      <h1>PRO AI ASSISTANT</h1>
+      <p>مساعد تكتيكي بيتكلم مصري — اسأله عن أي حاجة في فريقك، بالكتابة أو بالصوت.</p>
+    </div>
+
+    <div class="pro-lock" id="assistantLock" hidden>
+      <div class="lock-card">
+        <span class="lock-ico">🔒</span>
+        <h3>المساعد المتقدم لاشتراك PRO</h3>
+        <p>النسخة المجانية بتديك ٣ أسئلة في اليوم. PRO بيفتح محادثة غير محدودة + تقارير وتقدم.</p>
+        <button class="btn gold" data-nav="pro" type="button">شوف باقات PRO</button>
+      </div>
+    </div>
+
+    <div class="chat-shell" id="chatShell">
+      <div class="chat-top">
+        <div class="chat-avatar">🤖</div>
+        <div><b>كابتن AI</b><i id="chatStatus">جاهز</i></div>
+        <button class="icon-btn" id="clearChat" type="button" aria-label="مسح المحادثة">🗑️</button>
+      </div>
+      <div class="chat-body" id="chatBody"></div>
+      <div class="chat-input">
+        <button class="mic-btn" id="micBtn" type="button" aria-label="تحدث">🎙️</button>
+        <textarea id="chatText" rows="1" placeholder="اكتب سؤالك… مثلاً: إيه أفضل خطة لفريقي؟"></textarea>
+        <button class="send-btn" id="sendBtn" type="button" aria-label="إرسال">➤</button>
+      </div>
+      <div class="chat-quota" id="chatQuota"></div>
+    </div>
+  </section>
+
+  <!-- ───── بناء التشكيلة ───── -->
+  <section class="view" data-view="builder" id="view-builder" hidden>
+    <div class="page-head">
+      <h1>TEAM BUILDER</h1>
+      <p>اختار الخطة، حط اللاعبين في مراكزهم، شوف التقييم، وقارن تشكيلتين.</p>
+    </div>
+
+    <div class="builder-bar">
+      <select id="formationSelect" class="select" aria-label="الخطة"></select>
+      <button class="btn ghost sm" id="suggestBtn" type="button">اقترح أفضل تشكيلة</button>
+      <button class="btn ghost sm" id="saveTeamBtn" type="button">حفظ التشكيلة</button>
+      <button class="btn ghost sm" id="compareBtn" type="button">مقارنة</button>
+    </div>
+
+    <div class="pitch-wrap">
+      <div class="pitch" id="pitch"></div>
+      <aside class="builder-side">
+        <div class="strength-card">
+          <span>قوة الفريق</span>
+          <b id="teamStrength">—</b>
+          <div class="strength-bar"><i id="strengthBar"></i></div>
+          <small id="strengthHint">اختار الخطة وابدأ تحط لاعبين</small>
+        </div>
+        <div class="lineup-list" id="lineupList"></div>
+      </aside>
+    </div>
+
+    <div class="panel" id="playerPicker" hidden>
+      <h3 id="pickerTitle">اختار لاعب</h3>
+      <input id="playerSearch" class="input" type="search" placeholder="ابحث بالاسم…" />
+      <div class="picker-list" id="pickerList"></div>
+      <div class="manual-add">
+        <input id="manualName" class="input" placeholder="اسم اللاعب" />
+        <input id="manualRating" class="input" inputmode="numeric" placeholder="تقييم (اختياري)" />
+        <button class="btn gold sm" id="manualAddBtn" type="button">إضافة</button>
+      </div>
+      <button class="btn ghost sm" id="pickerClose" type="button">إغلاق</button>
+    </div>
+
+    <div class="panel" id="savedTeamsPanel" hidden>
+      <h3>تشكيلاتي المحفوظة</h3>
+      <div class="list" id="savedTeams"></div>
+    </div>
+
+    <div class="panel" id="comparePanel" hidden>
+      <h3>مقارنة تشكيلتين</h3>
+      <div id="compareBody"></div>
+    </div>
+  </section>
+
+  <!-- ───── تحليل المباريات ───── -->
+  <section class="view" data-view="matches" id="view-matches" hidden>
+    <div class="page-head">
+      <h1>MATCH ANALYSIS</h1>
+      <p>سجّل نتيجة المباراة وإحصائياتها — أو ارفع صورة النتيجة والأدمن/التحليل يقراها وتأكدها بنفسك.</p>
+    </div>
+
+    <div class="panel">
+      <h3>تسجيل مباراة</h3>
+      <div class="grid-2">
+        <label>نتيجتك <input id="mScoreFor" class="input" type="number" min="0" max="99" inputmode="numeric" /></label>
+        <label>نتيجة الخصم <input id="mScoreAgainst" class="input" type="number" min="0" max="99" inputmode="numeric" /></label>
+        <label>عدد أهدافك <input id="mGoals" class="input" type="number" min="0" max="99" inputmode="numeric" /></label>
+        <label>الخصم <input id="mOpponent" class="input" placeholder="اسم الفريق أو المستخدم" /></label>
+      </div>
+      <label class="full">ملاحظاتك <textarea id="mNotes" class="input" rows="2" placeholder="إيه اللي حصل في المباراة؟"></textarea></label>
+      <div class="row-actions">
+        <button class="btn gold" id="saveMatchBtn" type="button">حفظ وتحليل</button>
+        <button class="btn ghost" id="matchImageBtn" type="button">رفع صورة النتيجة</button>
+        <input type="file" id="matchImage" accept="image/*" hidden />
+      </div>
+      <p class="fine">التحليل مبني على الأرقام اللي بتدخلها وصورة النتيجة — مفيش اتصال مباشر بحسابك في اللعبة، ولا نطلب بيانات Konami ID.</p>
+    </div>
+
+    <div class="panel" id="matchAiResult" hidden></div>
+
+    <div class="stats-row" id="matchStats" hidden></div>
+
+    <div class="panel">
+      <h3>سجل المباريات</h3>
+      <div class="list" id="matchHistory"></div>
+    </div>
+  </section>
+
+  <!-- ───── المتجر ───── -->
+  <section class="view" data-view="store" id="view-store" hidden>
+    <div class="page-head">
+      <h1>PRO STORE</h1>
+      <p>خدمات ومنتجات رقمية يضيفها فريق المنصة — كل خدمة بتفاصيلها وسعرها.</p>
+    </div>
+    <div class="store-tools">
+      <input id="storeSearch" class="input" type="search" placeholder="ابحث في المتجر…" />
+      <button class="btn ghost sm" id="cartBtn" type="button">السلة <span id="cartCount">0</span></button>
+    </div>
+    <div class="cards store-cards" id="storeGrid"></div>
+    <div class="panel empty" id="storeEmpty" hidden>
+      <b>المتجر فاضي حاليًا</b>
+      <p>الأدمن لسه مضافش خدمات. أول ما يضيف خدمة من لوحة التحكم هتظهر هنا فورًا.</p>
+    </div>
+  </section>
+
+  <!-- ───── تفاصيل خدمة ───── -->
+  <section class="view" data-view="product" id="view-product" hidden>
+    <button class="back-btn" data-nav="store" type="button">‹ رجوع للمتجر</button>
+    <div id="productDetail"></div>
+  </section>
+
+  <!-- ───── السلة ───── -->
+  <section class="view" data-view="cart" id="view-cart" hidden>
+    <button class="back-btn" data-nav="store" type="button">‹ رجوع للمتجر</button>
+    <div class="page-head"><h1>سلة الطلبات</h1><p>راجع طلبك قبل الإرسال.</p></div>
+    <div class="panel" id="cartBody"></div>
+  </section>
+
+  <!-- ───── الاشتراكات ───── -->
+  <section class="view" data-view="pro" id="view-pro" hidden>
+    <div class="page-head">
+      <h1>SUBSCRIPTIONS</h1>
+      <p>اختار الباقة اللي تناسبك — التفعيل بيتم بعد تأكيد الدفع من الإدارة.</p>
+    </div>
+    <div class="plans" id="plansGrid"></div>
+    <div class="panel" id="subStatus" hidden></div>
+    <div class="panel">
+      <h3>إزاي بيتم تفعيل الاشتراك؟</h3>
+      <ol class="steps">
+        <li>تختار الباقة وتضغط "اطلب الاشتراك" — بيتسجل طلب بحالة <b>بانتظار الدفع</b>.</li>
+        <li>تتواصل معنا على واتساب وتدفع بالطريقة اللي يحددها الأدمن.</li>
+        <li>الأدمن يأكد الدفع → الاشتراك يتفعل ويوصلك إشعار فورًا.</li>
+      </ol>
+      <p class="fine">الاشتراك لا بيظهر كـ "مدفوع" ولا "مفعّل" قبل تأكيد الإدارة. مفيش بوابة دفع آلية متصلة حاليًا.</p>
+    </div>
+  </section>
+
+  <!-- ───── الحساب ───── -->
+  <section class="view" data-view="account" id="view-account" hidden>
+    <div class="page-head"><h1>حسابي</h1><p>بياناتك وإعداداتك — كلها محفوظة في قاعدة البيانات.</p></div>
+    <div class="profile-card">
+      <div class="prof-avatar" id="profAvatar">؟</div>
+      <div class="prof-info"><b id="profName">—</b><span id="profPhone">—</span><em id="profEmail">—</em></div>
+      <div class="prof-plan" id="profPlan">FREE</div>
+    </div>
+    <div class="quick-rows">
+      <button class="quick-row" data-nav="orders" type="button"><span>🧾</span><div><b>طلباتي</b><i>حالة كل طلب اشتركت فيه</i></div><em>›</em></button>
+      <button class="quick-row" data-nav="notifications" type="button"><span>🔔</span><div><b>الإشعارات</b><i>كل اللي وصلك من المنصة</i></div><em>›</em></button>
+      <button class="quick-row" data-nav="settings" type="button"><span>⚙️</span><div><b>الإعدادات</b><i>الملف الشخصي، الرمز السري، الخصوصية</i></div><em>›</em></button>
+      <button class="quick-row" data-nav="legal" type="button"><span>⚖️</span><div><b>الشروط والخصوصية</b><i>إخلاء المسؤولية وحقوقك</i></div><em>›</em></button>
+      <button class="quick-row danger" id="logoutRow" type="button"><span>🚪</span><div><b>تسجيل الخروج</b><i>بياناتك بتفضل محفوظة</i></div><em>›</em></button>
+    </div>
+  </section>
+
+  <!-- ───── الإعدادات ───── -->
+  <section class="view" data-view="settings" id="view-settings" hidden>
+    <button class="back-btn" data-nav="account" type="button">‹ رجوع</button>
+    <div class="page-head"><h1>الإعدادات</h1><p>عدّل بياناتك وأمان حسابك.</p></div>
+
+    <div class="panel">
+      <h3>الملف الشخصي</h3>
+      <div class="grid-2">
+        <label>الاسم <input id="setName" class="input" /></label>
+        <label>رقم الهاتف <input id="setPhone" class="input" inputmode="tel" /></label>
+        <label>البريد الإلكتروني <input id="setEmail" class="input" inputmode="email" /></label>
+      </div>
+      <div class="row-actions"><button class="btn gold" id="saveProfileBtn" type="button">حفظ التعديلات</button></div>
+    </div>
+
+    <div class="panel">
+      <h3>الرمز السري (اختياري)</h3>
+      <p class="fine">الرمز ٤ أرقام بيتخزن مشفّر (PBKDF2) — مش نص مكشوف. لو نسيت الباسورد الأساسي، مش هيحل مكانه.</p>
+      <div id="pinState"></div>
+      <div class="grid-2" id="pinForm">
+        <label>رمز جديد <input id="pinNew" class="input" inputmode="numeric" maxlength="4" placeholder="٤ أرقام" /></label>
+        <label>تأكيد الرمز <input id="pinConfirm" class="input" inputmode="numeric" maxlength="4" placeholder="٤ أرقام" /></label>
+      </div>
+      <div class="row-actions">
+        <button class="btn gold" id="savePinBtn" type="button">حفظ الرمز</button>
+        <button class="btn ghost" id="removePinBtn" type="button">إزالة الرمز</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>كلمة المرور</h3>
+      <div class="grid-2">
+        <label>كلمة المرور الحالية <input id="curPass" class="input" type="password" autocomplete="current-password" /></label>
+        <label>كلمة المرور الجديدة <input id="newPass" class="input" type="password" autocomplete="new-password" /></label>
+      </div>
+      <div class="row-actions"><button class="btn gold" id="changePassBtn" type="button">تغيير كلمة المرور</button></div>
+      <p class="fine" id="authProviderNote"></p>
+    </div>
+
+    <div class="panel">
+      <h3>الإشعارات</h3>
+      <label class="switch-row"><span>إشعارات الاشتراك والطلبات</span><input type="checkbox" id="notifOrders" checked /></label>
+      <label class="switch-row"><span>تحديثات المنصة والعروض</span><input type="checkbox" id="notifUpdates" checked /></label>
+      <label class="switch-row"><span>نتائج تحليل الذكاء الاصطناعي</span><input type="checkbox" id="notifAi" checked /></label>
+      <div class="row-actions"><button class="btn gold" id="saveNotifBtn" type="button">حفظ تفضيلات الإشعارات</button></div>
+    </div>
+
+    <div class="panel">
+      <h3>الخصوصية</h3>
+      <label class="switch-row"><span>السماح بحفظ سجل التحليلات لتحسين تجربتي</span><input type="checkbox" id="privHistory" checked /></label>
+      <label class="switch-row"><span>إخفاء رقم هاتفي عن أي عرض عام</span><input type="checkbox" id="privHidePhone" checked /></label>
+      <div class="row-actions"><button class="btn gold" id="savePrivacyBtn" type="button">حفظ</button></div>
+      <p class="fine">الصور اللي بترفعها بتتحلل مباشرة ولا تُخزَّن بشكل دائم — بيتحفظ التحليل النصي فقط.</p>
+    </div>
+
+    <div class="panel danger-panel">
+      <h3>حذف الحساب</h3>
+      <p class="fine">حذف نهائي لكل بياناتك (تشكيلات، مباريات، تحليلات، طلبات). مفيش رجوع. اكتب اسمك للتأكيد.</p>
+      <input id="deleteConfirm" class="input" placeholder="اكتب اسمك بالظبط" />
+      <div class="row-actions"><button class="btn danger" id="deleteAccountBtn" type="button">حذف الحساب نهائيًا</button></div>
+    </div>
+  </section>
+
+  <!-- ───── الإشعارات ───── -->
+  <section class="view" data-view="notifications" id="view-notifications" hidden>
+    <button class="back-btn" data-nav="home" type="button">‹ رجوع</button>
+    <div class="page-head"><h1>الإشعارات</h1><p>كل رسائل المنصة لك في مكان واحد.</p></div>
+    <div class="list" id="notifList"></div>
+    <div class="panel empty" id="notifEmpty" hidden><b>مفيش إشعارات لسه</b><p>هتلاقي هنا تفعيل الاشتراك، حالة الطلبات، ونتائج التحليل.</p></div>
+  </section>
+
+  <!-- ───── الطلبات ───── -->
+  <section class="view" data-view="orders" id="view-orders" hidden>
+    <button class="back-btn" data-nav="account" type="button">‹ رجوع</button>
+    <div class="page-head"><h1>طلباتي</h1><p>حالة كل طلب — التحديث لحظي من قاعدة البيانات.</p></div>
+    <div class="list" id="ordersList"></div>
+    <div class="panel empty" id="ordersEmpty" hidden><b>مفيش طلبات</b><p>اطلب خدمة من المتجر أو باقة PRO وهتلاقيها هنا.</p></div>
+  </section>
+
+  <!-- ───── الشروط والخصوصية ───── -->
+  <section class="view" data-view="legal" id="view-legal" hidden>
+    <button class="back-btn" data-nav="home" type="button">‹ رجوع</button>
+    <div class="page-head"><h1>الشروط والخصوصية</h1><p>اقرأها قبل استخدام الأدوات — دي حماية لك ولنا.</p></div>
+    <div class="panel legal">
+      <h3>١. استقلالية المنصة</h3>
+      <p>PES AI PRO منصة مستقلة لعشاق eFootball. هي <b>غير تابعة لـ KONAMI</b> ولا مرتبطة بها رسميًا ولا مدعومة منها. كل أسماء اللعبة وعلاماتها التجارية ملك أصحابها.</p>
+      <h3>٢. مفيش تحكم في اللعبة</h3>
+      <p>المنصة <b>لا تطلب</b> Konami ID أو بيانات دخول اللعبة، و<b>لا تسجّل دخول آليًا</b> على أي حساب لعبة، ولا تلعب نيابة عنك ولا تجمع عملات ولا تنفذ مشتريات داخل اللعبة. كل التحليلات مبنية على بيانات تدخلها أنت أو صور ترفعها بنفسك.</p>
+      <h3>٣. الذكاء الاصطناعي اقتراح مش ضمان</h3>
+      <p>التحليلات والتوصيات ناتجة عن نموذج ذكاء اصطناعي وقد تحتوي أخطاء. التقييمات المبنية على تقدير بيتم توضيح إنها "تقديري". القرار النهائي في اللعبة ليك.</p>
+      <h3>٤. بياناتك</h3>
+      <p>اسمك ورقمك وبريدك والرمز السري المشفّر وتشكيلاتك ومبارياتك — محفوظة في قاعدة بياناتك على Firebase ولا تُشارك مع مستخدم آخر. الصور تُحلَّل ولا تُخزَّن بشكل دائم. تقدر تحذف حسابك نهائيًا من الإعدادات.</p>
+      <h3>٥. الحسابات والاستخدام العادل</h3>
+      <p>ممنوع محاولة الوصول لبيانات مستخدم آخر، أو استخدام المنصة لبيع حسابات لعب أو مشاركة بيانات دخول. الحساب المخالف بيتوقف فورًا.</p>
+      <h3>٦. المدفوعات</h3>
+      <p>الاشتراكات والخدمات بتتفعل بعد تأكيد الدفع من الإدارة. مفيش بوابة دفع آلية متصلة حاليًا، والاشتراك لا يظهر كمفعّل قبل التأكيد.</p>
+      <h3>٧. الإبلاغ</h3>
+      <p>أي مشكلة أو تعدي على الشروط — تواصل معنا من أيقونات التواصل في الصفحة الرئيسية.</p>
+    </div>
+  </section>
+
+</main>
+
+<!-- ══════════ شريط التنقل السفلي ══════════ -->
+<nav class="bottom-nav" id="bottomNav" hidden>
+  <button data-nav="home" type="button"><span class="ni">🏠</span><em>الرئيسية</em></button>
+  <button data-nav="analyzer" type="button"><span class="ni">🧠</span><em>تحليل الفريق</em></button>
+  <button data-nav="assistant" type="button"><span class="ni">💬</span><em>المساعد الذكي</em></button>
+  <button data-nav="store" type="button"><span class="ni">🛍️</span><em>المتجر</em></button>
+  <button data-nav="account" type="button"><span class="ni">👤</span><em>حسابي</em></button>
+</nav>
+
+<!-- ══════════ شاشة الدخول ══════════ -->
+<div class="auth-shell" id="authShell" hidden>
+  <div class="auth-visual">
+    <div class="auth-photo" id="authPhoto"></div>
+    <div class="auth-badge"><img src="images/icon.png" alt="" /><b>PES AI PRO</b></div>
+    <p class="auth-tag">YOUR TEAM. YOUR POWER. YOUR AI.</p>
+  </div>
+
+  <div class="auth-form-wrap">
+    <div class="auth-tabs" role="tablist">
+      <button class="active" id="tabLogin" type="button" role="tab">تسجيل الدخول</button>
+      <button id="tabRegister" type="button" role="tab">حساب جديد</button>
+    </div>
+
+    <!-- دخول -->
+    <form id="loginForm" class="auth-form" novalidate>
+      <div class="seg-row">
+        <button type="button" class="seg active" data-login="email">إيميل / رقم + باسورد</button>
+        <button type="button" class="seg" data-login="google">Google</button>
+        <button type="button" class="seg" data-login="phone">رقم + كود</button>
+      </div>
+
+      <div id="loginEmailBlock">
+        <label>الإيميل أو رقم الموبايل
+          <input id="loginEmail" class="input" inputmode="email" autocomplete="username" placeholder="you@mail.com أو 01xxxxxxxxx" required />
+        </label>
+        <label>كلمة المرور
+          <input id="loginPass" class="input" type="password" autocomplete="current-password" required />
+        </label>
+        <div class="grid-2" id="loginPinBlock" hidden>
+          <label>الرمز السري (لو فعّلته)
+            <input id="loginPin" class="input" inputmode="numeric" maxlength="4" placeholder="٤ أرقام" />
+          </label>
+        </div>
+        <button class="btn gold full" type="submit" id="loginBtn">دخول</button>
+        <button class="link-btn" type="button" id="forgotBtn">نسيت كلمة المرور؟</button>
+      </div>
+
+      <div id="loginGoogleBlock" hidden>
+        <button class="google-btn" type="button" id="googleLoginBtn">
+          <svg viewBox="0 0 48 48" width="20" height="20"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.1 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.1 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.3 0-9.7-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.3-2.3 4.2-4.1 5.6l6.2 5.2C37 39.1 44 34 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>
+          الدخول بحساب Google
+        </button>
+        <p class="fine">أول مرة تدخل بجوجل، هنكمّل معاك بيانات الموبايل والاسم مرة واحدة بس.</p>
+      </div>
+
+      <div id="loginPhoneBlock" hidden>
+        <label>رقم الموبايل الدولي
+          <input id="loginPhone" class="input" inputmode="tel" placeholder="+20 1xx xxx xxxx" />
+        </label>
+        <button class="btn gold full" type="button" id="sendOtpBtn">أرسل كود التحقق</button>
+        <div id="otpBox" hidden>
+          <div id="recaptchaHost"></div>
+          <label>الكود اللي وصلك
+            <input id="otpCode" class="input" inputmode="numeric" maxlength="6" placeholder="6 أرقام" />
+          </label>
+          <button class="btn gold full" type="button" id="verifyOtpBtn">تأكيد الكود</button>
+        </div>
+      </div>
+
+      <p class="auth-msg" id="loginMsg"></p>
+    </form>
+
+    <!-- تسجيل جديد -->
+    <form id="registerForm" class="auth-form" hidden novalidate>
+      <button class="google-btn" type="button" id="googleRegisterBtn">
+        <svg viewBox="0 0 48 48" width="20" height="20"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.1 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.1 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.3 0-9.7-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.3-2.3 4.2-4.1 5.6l6.2 5.2C37 39.1 44 34 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>
+        إنشاء حساب بـ Google
+      </button>
+      <div class="or"><span>أو بالإيميل</span></div>
+      <label>الاسم <input id="regName" class="input" autocomplete="name" required /></label>
+      <label>رقم الموبايل <input id="regPhone" class="input" inputmode="tel" placeholder="01xxxxxxxxx" required /></label>
+      <label>البريد الإلكتروني <input id="regEmail" class="input" inputmode="email" autocomplete="email" required /></label>
+      <label>كلمة المرور <input id="regPass" class="input" type="password" autocomplete="new-password" minlength="8" required /></label>
+      <label>تأكيد كلمة المرور <input id="regPass2" class="input" type="password" autocomplete="new-password" required /></label>
+      <label>رمز سري اختياري (٤ أرقام) <input id="regPin" class="input" inputmode="numeric" maxlength="4" placeholder="اتركه فاضي لو مش عايز" /></label>
+      <label class="check-row"><input type="checkbox" id="regTerms" /> <span>أوافق على <b>الشروط والخصوصية</b> وعلى إن المنصة غير تابعة لـ KONAMI.</span></label>
+      <button class="btn gold full" type="submit" id="registerBtn">إنشاء الحساب</button>
+      <p class="auth-msg" id="registerMsg"></p>
+    </form>
+  </div>
+</div>
+
+<!-- ══════════ مودال عام ══════════ -->
+<div class="modal-back" id="modalBack" hidden>
+  <div class="modal" role="dialog" aria-modal="true">
+    <h3 id="modalTitle">—</h3>
+    <div id="modalBody"></div>
+    <div class="modal-actions" id="modalActions"></div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

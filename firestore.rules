@@ -1,0 +1,146 @@
+rules_version = '2';
+
+// ═══════════════════════════════════════════════════════════════
+// PES AI PRO — قواعد أمان Firestore
+// الحماية الحقيقية هنا، مش في الواجهة.
+// ═══════════════════════════════════════════════════════════════
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /* ─────────── دوال مساعدة ─────────── */
+    function signedIn() {
+      return request.auth != null;
+    }
+    function uid() {
+      return request.auth.uid;
+    }
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(uid()))
+        && get(/databases/$(database)/documents/users/$(uid())).data.role == 'admin'
+        && get(/databases/$(database)/documents/users/$(uid())).data.status != 'blocked';
+    }
+    function isBlocked() {
+      return exists(/databases/$(database)/documents/users/$(uid()))
+        && get(/databases/$(database)/documents/users/$(uid())).data.status == 'blocked';
+    }
+    // مستخدم مسجّل ونشط وغير موقوف
+    function canUse() {
+      return signedIn() && !isBlocked();
+    }
+
+    /* ─────────── المستخدمون ─────────── */
+    match /users/{userId} {
+      // المستخدم يشوف ملفه فقط. الأدمن يشوف الجميع.
+      allow read: if signedIn() && (uid() == userId || isAdmin());
+
+      // الإنشاء: صاحب الحساب فقط، وبدور user وباقة FREE — ممنوع يزوّر صلاحيات
+      allow create: if signedIn()
+        && uid() == userId
+        && request.resource.data.uid == userId
+        && request.resource.data.role == 'user'
+        && request.resource.data.status == 'active'
+        && request.resource.data.plan == 'FREE'
+        && request.resource.data.planExpiresAt == null;
+
+      // التعديل: صاحب الحساب يعدّل بياناته الشخصية فقط
+      allow update: if signedIn() && uid() == userId
+        && request.resource.data.role == resource.data.role          // ممنوع يرقّي نفسه
+        && request.resource.data.status == resource.data.status       // ممنوع يفعّل نفسه
+        && !request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['plan', 'planExpiresAt', 'role', 'status', 'createdAt', 'settings.adminNote']);
+
+      // الأدمن يعدّل أي حاجة (باقة، حالة، ملاحظات)
+      allow update: if isAdmin();
+
+      // الحذف: للأدمن فقط؛ حذف الحساب الذاتي يبدأ من الواجهة بعد تأكيد الاسم
+      // والمستخدم العادي يقدر يحذف بياناته الفرعية لكن ملفه يُحذف بواسطة الأدمن/الدعم
+      allow delete: if isAdmin();
+
+      /* ─────────── بيانات المستخدم الفرعية ─────────── */
+      match /teams/{docId} {
+        allow read, write: if signedIn() && uid() == userId;
+        allow read, write: if isAdmin();
+      }
+      match /matches/{docId} {
+        allow read, write: if signedIn() && uid() == userId;
+        allow read, write: if isAdmin();
+      }
+      match /analyses/{docId} {
+        allow read, write: if signedIn() && uid() == userId;
+        allow read, write: if isAdmin();
+      }
+      // الإشعارات: المستخدم يقرأ ويعلّم كمقروء، وممنوع ينشئ لنفسه إشعارات إدارية
+      match /notifications/{docId} {
+        allow read: if signedIn() && (uid() == userId || isAdmin());
+        allow create: if isAdmin();
+        allow update: if signedIn() && uid() == userId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+        allow update: if isAdmin();
+        allow delete: if signedIn() && uid() == userId;
+        allow delete: if isAdmin();
+      }
+    }
+
+    /* ─────────── الطلبات (Orders) ─────────── */
+    match /orders/{orderId} {
+      // إنشاء: صاحب الطلب فقط، بحالة pending وبياناته الحقيقية
+      allow create: if canUse()
+        && request.resource.data.userId == uid()
+        && request.resource.data.status == 'pending'
+        && request.resource.data.total is number
+        && request.resource.data.total >= 0;
+
+      allow read: if signedIn() && (resource.data.userId == uid() || isAdmin());
+
+      // المستخدم يقدر يلغي طلبه وهو pending فقط (بدون تغيير المبالغ)
+      allow update: if signedIn() && resource.data.userId == uid()
+        && resource.data.status == 'pending'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
+        && request.resource.data.status == 'cancelled';
+
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    /* ─────────── المتجر: المنتجات ─────────── */
+    match /products/{productId} {
+      // أي حد داخل يشوف الخدمات الظاهرة فقط
+      allow read: if canUse() && resource.data.visible == true;
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    /* ─────────── اللاعبون ─────────── */
+    match /players/{playerId} {
+      allow read: if canUse();
+      allow write: if isAdmin();
+    }
+
+    /* ─────────── الإعدادات العامة ─────────── */
+    match /config/{docId} {
+      allow read: if canUse();
+      allow write: if isAdmin();
+    }
+
+    /* ─────────── سجل عمليات الأدمن ─────────── */
+    match /adminAudit/{logId} {
+      allow read: if isAdmin();
+      // سماح بتسجيل محاولة دخول فاشلة قبل المصادقة (محدود)
+      allow create: if true;
+      allow update, delete: if false;
+    }
+
+    /* ─────────── أدمن إضافي (اختياري) ─────────── */
+    match /admins/{adminId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    /* ─────────── أي مسار آخر: مرفوض ─────────── */
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
