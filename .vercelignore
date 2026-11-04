@@ -1,0 +1,10 @@
+node_modules
+tests
+src
+build.mjs
+package.json
+package-lock.json
+firebase.json
+firestore.rules
+firestore.indexes.json
+*.md

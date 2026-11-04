@@ -117,9 +117,12 @@ const FIREBASE_CONFIG = {
 1. ارفع الريبو على GitHub.
 2. Vercel → **Add New Project** → اختار الريبو → **Framework Preset: Other** → **Deploy**.
 3. خلاص. `index.html` هي الصفحة الرئيسية و `admin.html` لوحة التحكم.
+   (المشروع static — مفيش build command، و`vercel.json` فيه الـ headers والكاش جاهزين.)
 
 > متنساش تضيف دومين Vercel في **Firebase → Authentication → Settings → Authorized domains**
-> وإلا تسجيل الدخول بجوجل/الإيميل هيترفض.
+> وإلا تسجيل الدخول بجوجل/الإيميل هيترفض (مثال: `your-project.vercel.app`).
+
+> لو احتجت تعيد بناء حزمة Firebase بعد تحديث المكتبة: `npm run bundle:firebase`.
 
 ---
 
