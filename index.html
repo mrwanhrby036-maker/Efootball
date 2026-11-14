@@ -57,6 +57,15 @@
         .input-group label { display: block; margin-bottom: 10px; font-weight: 600; font-size: 0.95rem; }
         .cyber-input, .cyber-select { width: 100%; background-color: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-light); padding: 15px 20px; border-radius: 10px; font-size: 1.05rem; transition: 0.3s; outline: none; }
         .cyber-input:focus, .cyber-select:focus { border-color: var(--primary); box-shadow: var(--neon-shadow); }
+        /* Custom Dropdown Styles */
+        .custom-dropdown { position: relative; width: 100%; user-select: none; }
+        .custom-dropdown-btn { display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+        .custom-dropdown-btn:hover { border-color: var(--primary); box-shadow: var(--neon-shadow); }
+        .custom-dropdown-menu { position: absolute; top: calc(100% + 5px); left: 0; width: 100%; background: var(--bg-panel); border: 1px solid var(--border-color); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.8); z-index: 1000; display: none; overflow: hidden; animation: fadeInModal 0.2s ease; }
+        .custom-dropdown-menu.show { display: block; }
+        .custom-dropdown-item { padding: 14px 20px; color: var(--text-light); font-size: 1rem; cursor: pointer; transition: 0.2s; border-bottom: 1px solid rgba(255,255,255,0.03); }
+        .custom-dropdown-item:last-child { border-bottom: none; }
+        .custom-dropdown-item:hover, .custom-dropdown-item.selected { background: rgba(0, 242, 254, 0.1); color: var(--primary); }
         .cyber-btn { background: linear-gradient(90deg, var(--primary), var(--secondary)); color: #000; border: none; padding: 16px 30px; border-radius: 10px; font-size: 1.05rem; font-weight: 800; cursor: pointer; width: 100%; transition: 0.3s; display: flex; align-items: center; justify-content: center; gap: 10px; text-decoration: none; }
         .cyber-btn:hover { box-shadow: var(--neon-shadow); transform: translateY(-2px); }
         .btn-gold { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
@@ -207,12 +216,24 @@
                     <div class="grid-2col">
                         <div class="input-group">
                             <label><i class="fa-solid fa-flag"></i> اختر الدولة لعرض الأسعار بعملتها:</label>
-                            <select id="countrySelect" class="cyber-select" onchange="updateGoldUI()">
+                            <select id="countrySelect" style="display: none;" onchange="updateGoldUI()">
                                 <option value="EGP">مصر (الجنيه المصري - EGP)</option>
                                 <option value="SAR">السعودية (الريال السعودي - SAR)</option>
                                 <option value="AED">الإمارات (الدرهم الإماراتي - AED)</option>
                                 <option value="KWD">الكويت (الدينار الكويتي - KWD)</option>
                             </select>
+                            <div class="custom-dropdown" id="customCountryDropdown">
+                                <div class="custom-dropdown-btn cyber-input" onclick="toggleCustomDropdown(event)">
+                                    <span id="customCountrySelectedText">مصر (الجنيه المصري - EGP)</span>
+                                    <i class="fa-solid fa-chevron-down" style="transition: 0.3s; color: var(--primary);"></i>
+                                </div>
+                                <div class="custom-dropdown-menu">
+                                    <div class="custom-dropdown-item selected" onclick="selectCountry('EGP', 'مصر (الجنيه المصري - EGP)')">مصر (الجنيه المصري - EGP)</div>
+                                    <div class="custom-dropdown-item" onclick="selectCountry('SAR', 'السعودية (الريال السعودي - SAR)')">السعودية (الريال السعودي - SAR)</div>
+                                    <div class="custom-dropdown-item" onclick="selectCountry('AED', 'الإمارات (الدرهم الإماراتي - AED)')">الإمارات (الدرهم الإماراتي - AED)</div>
+                                    <div class="custom-dropdown-item" onclick="selectCountry('KWD', 'الكويت (الدينار الكويتي - KWD)')">الكويت (الدينار الكويتي - KWD)</div>
+                                </div>
+                            </div>
                         </div>
                         <div class="input-group">
                             <label><i class="fa-solid fa-sliders"></i> تسعير الدولار الموازي / الصاغة (اختياري):</label>
@@ -935,6 +956,45 @@
             document.getElementById('finVat15').innerText = withVat.toFixed(2);
             document.getElementById('finResults').style.display = 'grid';
         }
+
+        function toggleCustomDropdown(e) {
+            e.stopPropagation();
+            var menu = document.querySelector('#customCountryDropdown .custom-dropdown-menu');
+            var icon = document.querySelector('#customCountryDropdown .custom-dropdown-btn i');
+            menu.classList.toggle('show');
+            icon.style.transform = menu.classList.contains('show') ? 'rotate(180deg)' : 'rotate(0deg)';
+        }
+
+        function selectCountry(val, text) {
+            var selectEl = document.getElementById('countrySelect');
+            selectEl.value = val;
+            document.getElementById('customCountrySelectedText').innerText = text;
+            
+            document.querySelectorAll('.custom-dropdown-item').forEach(function(item) {
+                item.classList.remove('selected');
+            });
+            if (event && event.target) {
+                event.target.classList.add('selected');
+            }
+
+            var menu = document.querySelector('#customCountryDropdown .custom-dropdown-menu');
+            var icon = document.querySelector('#customCountryDropdown .custom-dropdown-btn i');
+            if (menu) menu.classList.remove('show');
+            if (icon) icon.style.transform = 'rotate(0deg)';
+
+            if (typeof updateGoldUI === 'function') {
+                updateGoldUI();
+            }
+        }
+
+        window.addEventListener('click', function() {
+            var menu = document.querySelector('#customCountryDropdown .custom-dropdown-menu');
+            var icon = document.querySelector('#customCountryDropdown .custom-dropdown-btn i');
+            if (menu && menu.classList.contains('show')) {
+                menu.classList.remove('show');
+                if (icon) icon.style.transform = 'rotate(0deg)';
+            }
+        });
 
         window.onload = function() {
             fetchLiveMarketData();
