@@ -80,6 +80,12 @@
         .seo-box p { color: var(--text-dim); font-size: 0.9rem; line-height: 1.7; }
         .toast-notification { position: fixed; bottom: -100px; left: 30px; background: var(--bg-card); border: 1px solid var(--primary); border-right: 5px solid var(--primary); color: var(--text-light); padding: 15px 25px; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.8); display: flex; align-items: center; gap: 12px; z-index: 9999; transition: 0.4s; }
         .toast-notification.show { bottom: 30px; }
+        .cyber-alert-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(5, 7, 10, 0.85); backdrop-filter: blur(5px); display: flex; align-items: center; justify-content: center; z-index: 10000; opacity: 0; animation: fadeInModal 0.2s forwards; }
+        @keyframes fadeInModal { to { opacity: 1; } }
+        .cyber-alert-box { background: var(--bg-panel); border: 1px solid var(--primary); border-radius: 16px; padding: 30px; max-width: 420px; width: 90%; box-shadow: 0 0 30px rgba(0, 242, 254, 0.3); text-align: center; position: relative; transform: scale(0.9); animation: scaleInModal 0.2s forwards; }
+        @keyframes scaleInModal { to { transform: scale(1); } }
+        .cyber-alert-icon { font-size: 2.5rem; color: var(--primary); margin-bottom: 15px; filter: drop-shadow(0 0 10px var(--primary)); }
+        .cyber-alert-msg { color: var(--text-light); font-size: 1.1rem; margin-bottom: 25px; line-height: 1.6; font-weight: 600; }
         .grid-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
         @media (max-width: 900px) {
             body { flex-direction: column; }
@@ -560,6 +566,45 @@
             showToast(msg || ('تم نسخ: ' + text));
         }
 
+        function showCyberAlert(message) {
+            var existing = document.getElementById('cyberAlertModal');
+            if (existing) existing.remove();
+
+            var overlay = document.createElement('div');
+            overlay.className = 'cyber-alert-overlay';
+            overlay.id = 'cyberAlertModal';
+
+            var box = document.createElement('div');
+            box.className = 'cyber-alert-box';
+
+            var icon = document.createElement('div');
+            icon.className = 'cyber-alert-icon';
+            icon.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i>';
+
+            var msg = document.createElement('div');
+            msg.className = 'cyber-alert-msg';
+            msg.textContent = message;
+
+            var btn = document.createElement('button');
+            btn.className = 'cyber-btn';
+            btn.innerHTML = '<i class="fa-solid fa-check"></i> حسناً';
+            btn.onclick = function() {
+                overlay.remove();
+            };
+
+            box.appendChild(icon);
+            box.appendChild(msg);
+            box.appendChild(btn);
+            overlay.appendChild(box);
+            document.body.appendChild(overlay);
+
+            overlay.onclick = function(e) {
+                if (e.target === overlay) {
+                    overlay.remove();
+                }
+            };
+        }
+
         // Defense in depth: only allow http(s) URLs to be written into href/src.
         // Without this, a compromised or malicious response from a third-party API
         // (tikwm.com, cobalt.tools, ...) could set a "javascript:" URI that runs
@@ -632,7 +677,7 @@
             var card = document.getElementById('tiktokResultCard');
 
             if (!url || url.indexOf('tiktok.com') === -1) {
-                return alert("من فضلك ضع رابط فيديو تيك توك صحيح!");
+                return showCyberAlert("من فضلك ضع رابط فيديو تيك توك صحيح!");
             }
 
             btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري سحب الفيديو وإزالة العلامة...';
@@ -663,10 +708,10 @@
                     card.style.display = 'grid';
                     showToast("تم سحب الفيديو بنجاح بدون علامة مائية!");
                 } else {
-                    alert("تأكد من أن الرابط صحيح وأن الفيديو عام.");
+                    showCyberAlert("تأكد من أن الرابط صحيح وأن الفيديو عام.");
                 }
             } catch (err) {
-                alert("حدث خطأ في الاتصال بالإنترنت، حاول مرة أخرى.");
+                showCyberAlert("حدث خطأ في الاتصال بالإنترنت، حاول مرة أخرى.");
             }
 
             btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down"></i> سحب الفيديو وإزالة العلامة المائية';
@@ -687,7 +732,7 @@
 
             var videoId = extractYouTubeId(url);
             if (!videoId) {
-                return alert("من فضلك ضع رابط يوتيوب صحيح!");
+                return showCyberAlert("من فضلك ضع رابط يوتيوب صحيح!");
             }
 
             btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري استخراج البيانات والصور...';
@@ -836,7 +881,7 @@
         function makeWhatsApp() {
             var num = document.getElementById('waNum').value.replace(/\D/g, '');
             var text = encodeURIComponent(document.getElementById('waText').value.trim());
-            if (!num) return alert("أدخل الرقم");
+            if (!num) return showCyberAlert("أدخل الرقم");
             var url = 'https://wa.me/' + num + (text ? '?text=' + text : '');
             document.getElementById('waFinalLink').innerText = url;
             document.getElementById('waResultBox').style.display = 'block';
@@ -854,7 +899,7 @@
 
         function calcComprehensiveAge() {
             var val = document.getElementById('ageDateInput').value;
-            if (!val) return alert("حدد التاريخ");
+            if (!val) return showCyberAlert("حدد التاريخ");
             var dob = new Date(val), now = new Date();
             var diffDays = Math.floor(Math.abs(now - dob) / (1000 * 60 * 60 * 24));
             var years = Math.floor(diffDays / 365.25);
@@ -870,7 +915,7 @@
         function calcBodyMetrics() {
             var w = parseFloat(document.getElementById('bmiWeight').value);
             var h = parseFloat(document.getElementById('bmiHeight').value) / 100;
-            if (!w || !h) return alert("أدخل البيانات");
+            if (!w || !h) return showCyberAlert("أدخل البيانات");
             var bmi = (w / (h * h)).toFixed(1);
             document.getElementById('valBmi').innerText = bmi;
             document.getElementById('valBmiStatus').innerText = bmi < 18.5 ? "نحافة" : bmi < 25 ? "وزن مثالي" : "وزن زائد";
@@ -881,7 +926,7 @@
         function calcFinance() {
             var p = parseFloat(document.getElementById('finPrice').value);
             var d = parseFloat(document.getElementById('finDisc').value) || 0;
-            if (!p) return alert("أدخل السعر الأصلي");
+            if (!p) return showCyberAlert("أدخل السعر الأصلي");
             var saved = p * (d / 100);
             var afterDisc = p - saved;
             var withVat = afterDisc * 1.15;
