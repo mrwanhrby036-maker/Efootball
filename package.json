@@ -1,0 +1,6 @@
+{
+  "name": "cyber-toolkit",
+  "version": "1.0.0",
+  "description": "Cyberpunk Toolkit with Vercel Serverless Functions",
+  "private": true
+}
