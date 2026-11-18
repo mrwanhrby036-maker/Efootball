@@ -10,10 +10,14 @@ const TIKWM_PATH = '/api/';
 const REQUEST_TIMEOUT_MS = 8000;        // Must stay below vercel.json's maxDuration (10s)
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024; // 2 MB cap – protects against memory exhaustion
 const MAX_URL_LENGTH = 500;
+const MAX_QUALITY_LENGTH = 10;
 
 // Allowlist: only accept well-formed TikTok links. Anything else is rejected
 // outright instead of being forwarded to the upstream API.
 const TIKTOK_URL_PATTERN = /^https:\/\/(www\.|vt\.|vm\.|m\.)?tiktok\.com\/[^\s<>"']+$/i;
+
+// Allowed response formats for the quality param.
+const ALLOWED_QUALITIES = new Set(['', '144', '360', '480', '720', '1080']);
 
 // ──────────────────────────────────────────────────────────────────────────
 // Best-effort in-memory rate limiter
@@ -65,9 +69,12 @@ function getClientIp(req) {
 // ──────────────────────────────────────────────────────────────────────────
 // Outbound request to the TikTok extraction API
 // ──────────────────────────────────────────────────────────────────────────
-function fetchFromTikwm(targetUrl) {
+function fetchFromTikwm(targetUrl, quality) {
     return new Promise((resolve, reject) => {
-        const requestPath = `${TIKWM_PATH}?url=${encodeURIComponent(targetUrl)}`;
+        // tikwm only exposes two renditions per video: standard ("play") and HD ("hdplay").
+        // 720/1080 -> request HD, everything else -> standard.
+        const wantHd = quality === '720' || quality === '1080';
+        const requestPath = `${TIKWM_PATH}?url=${encodeURIComponent(targetUrl)}&hd=${wantHd ? 1 : 0}`;
 
         const request = https.get(
             {
@@ -131,7 +138,7 @@ module.exports = async (req, res) => {
         return;
     }
 
-    const { url } = req.query;
+    const { url, hd: quality } = req.query;
 
     if (!url || Array.isArray(url) || typeof url !== 'string') {
         res.status(400).json({ error: 'رابط الفيديو مطلوب' });
@@ -148,8 +155,18 @@ module.exports = async (req, res) => {
         return;
     }
 
+    // Validate quality parameter
+    let q = '';
+    if (quality) {
+        if (!ALLOWED_QUALITIES.has(quality)) {
+            res.status(400).json({ error: 'جودة غير مدعومة. القيم المقبولة: 144, 360, 480, 720, 1080' });
+            return;
+        }
+        q = quality;
+    }
+
     try {
-        const upstreamResponse = await fetchFromTikwm(url);
+        const upstreamResponse = await fetchFromTikwm(url, q);
 
         let parsedBody;
         try {

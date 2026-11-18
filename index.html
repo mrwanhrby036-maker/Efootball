@@ -29,7 +29,7 @@
         .sidebar { width: 290px; background-color: var(--bg-panel); border-left: 1px solid var(--border-color); display: flex; flex-direction: column; position: fixed; height: 100vh; right: 0; top: 0; z-index: 100; box-shadow: -10px 0 30px rgba(0,0,0,0.8); }
         .brand { padding: 25px 20px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 15px; }
         .brand i { font-size: 2.2rem; color: var(--primary); filter: drop-shadow(0 0 10px var(--primary)); }
-        .brand-text h1 { font-family: 'Orbitron', sans-serif; font-size: 1.4rem; background: linear-gradient(to left, var(--primary), var(--secondary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: 1px; }
+        .brand-text h1 { font-family: 'Orbitron', sans-serif; font-size: 1.4rem; background: linear-gradient(to left, var(--primary), var(--secondary)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: 1px; }
         .brand-text span { font-size: 0.75rem; color: var(--success); display: flex; align-items: center; gap: 5px; }
         .nav-menu { padding: 15px 10px; flex-grow: 1; overflow-y: auto; }
         .nav-category { font-size: 0.7rem; color: var(--text-dim); padding: 12px 15px 5px; text-transform: uppercase; font-weight: 800; letter-spacing: 1px; }
@@ -57,8 +57,12 @@
         .panel-body { background: var(--bg-panel); padding: 30px; border-radius: 0 0 15px 15px; border: 1px solid var(--border-color); box-shadow: 0 15px 35px rgba(0,0,0,0.6); }
         .input-group { margin-bottom: 20px; }
         .input-group label { display: block; margin-bottom: 10px; font-weight: 600; font-size: 0.95rem; }
-        .cyber-input, .cyber-select { width: 100%; background-color: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-light); padding: 15px 20px; border-radius: 10px; font-size: 1.05rem; transition: 0.3s; outline: none; }
-        .cyber-input:focus, .cyber-select:focus { border-color: var(--primary); box-shadow: var(--neon-shadow); }
+        .cyber-input, .cyber-select { width: 100%; background-color: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-light); padding: 15px 20px; border-radius: 10px; font-size: 1.05rem; transition: 0.3s ease; outline: none; font-family: 'Cairo', sans-serif; }
+        .cyber-input:focus, .cyber-select:focus { border-color: var(--primary); box-shadow: var(--neon-shadow); background-color: var(--bg-card); }
+        .cyber-select { appearance: none; -webkit-appearance: none; -moz-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%2300f2fe' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: left 16px center; background-size: 20px; padding-left: 48px; }
+        .cyber-select:hover { border-color: var(--primary); background-color: var(--bg-card); }
+        .cyber-select option { background-color: var(--bg-card); color: var(--text-light); padding: 12px 16px; font-family: 'Cairo', sans-serif; font-size: 1rem; }
+        .cyber-select option:hover, .cyber-select option:checked { background-color: rgba(0, 242, 254, 0.15); color: var(--primary); }
         .cyber-btn { background: linear-gradient(90deg, var(--primary), var(--secondary)); color: #000; border: none; padding: 16px 30px; border-radius: 10px; font-size: 1.05rem; font-weight: 800; cursor: pointer; width: 100%; transition: 0.3s; display: flex; align-items: center; justify-content: center; gap: 10px; text-decoration: none; }
         .cyber-btn:hover { box-shadow: var(--neon-shadow); transform: translateY(-2px); }
         .btn-gold { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
@@ -296,6 +300,16 @@
                         <label>انسخ رابط فيديو التيك توك وضعه هنا:</label>
                         <input type="text" id="tiktokInputUrl" class="cyber-input" placeholder="https://www.tiktok.com/@username/video/123456789...">
                     </div>
+                    <div class="input-group" style="margin-top: 10px;">
+                        <label><i class="fa-solid fa-video"></i> اختر الجودة:</label>
+                        <select id="tiktokQuality" class="cyber-select">
+                            <option value="">تلقائي (الأفضل)</option>
+                            <option value="144">SD (360p)</option>
+                            <option value="360">SD (480p)</option>
+                            <option value="720">HD (720p)</option>
+                            <option value="1080">Full HD (1080p)</option>
+                        </select>
+                    </div>
                     <button id="tiktokBtn" class="cyber-btn btn-tiktok" onclick="processTikTokVideo()">
                         <i class="fa-solid fa-cloud-arrow-down"></i> سحب الفيديو وإزالة العلامة المائية
                     </button>
@@ -334,6 +348,16 @@
                     <div class="input-group">
                         <label>انسخ رابط فيديو اليوتيوب وضعه هنا:</label>
                         <input type="text" id="youtubeInputUrl" class="cyber-input" placeholder="https://www.youtube.com/watch?v=...">
+                    </div>
+                    <div class="input-group" style="margin-top: 10px;">
+                        <label><i class="fa-solid fa-video"></i> اختر الجودة:</label>
+                        <select id="youtubeQuality" class="cyber-select">
+                            <option value="1080">Full HD (1080p)</option>
+                            <option value="720">HD (720p)</option>
+                            <option value="480">SD (480p)</option>
+                            <option value="360">SD (360p)</option>
+                            <option value="144">SD (144p)</option>
+                        </select>
                     </div>
                     <button id="youtubeBtn" class="cyber-btn" style="background: linear-gradient(90deg, #ff0000, #ff4d4d); color: #fff;" onclick="processYouTubeVideo()">
                         <i class="fa-solid fa-cloud-arrow-down"></i> جلب تفاصيل وروابط اليوتيوب
@@ -638,6 +662,7 @@
         // 2. تحميل فيديوهات تيك توك بدون علامة مائية
         async function processTikTokVideo() {
             var url = document.getElementById('tiktokInputUrl').value.trim();
+            var quality = document.getElementById('tiktokQuality').value;
             var btn = document.getElementById('tiktokBtn');
             var card = document.getElementById('tiktokResultCard');
 
@@ -649,7 +674,7 @@
             btn.disabled = true;
 
             try {
-                var apiUrl = '/api/tiktok?url=' + encodeURIComponent(url);
+                var apiUrl = '/api/tiktok?url=' + encodeURIComponent(url) + (quality ? '&quality=' + quality : '');
                 var response = await fetch(apiUrl);
                 var result = await response.json();
 
@@ -692,6 +717,7 @@
 
         async function processYouTubeVideo() {
             var url = document.getElementById('youtubeInputUrl').value.trim();
+            var quality = document.getElementById('youtubeQuality').value || '720';
             var btn = document.getElementById('youtubeBtn');
             var card = document.getElementById('youtubeResultCard');
 
@@ -705,12 +731,12 @@
 
             try {
                 var thumbUrl = 'https://img.youtube.com/vi/' + videoId + '/maxresdefault.jpg';
-                
+
                 document.getElementById('ytCover').src = thumbUrl;
                 document.getElementById('ytTitle').innerText = 'فيديو يوتيوب (ID: ' + videoId + ')';
                 document.getElementById('ytVideoId').innerText = 'Video ID: ' + videoId;
                 document.getElementById('ytDownloadThumb').href = thumbUrl;
-                
+
                 // Using Cobalt API for direct video/audio streaming links
                 var cobaltRes = await fetch('https://api.cobalt.tools/api/json', {
                     method: 'POST',
@@ -720,10 +746,10 @@
                     },
                     body: JSON.stringify({
                         url: url,
-                        vQuality: '720'
+                        vQuality: quality
                     })
                 });
-                
+
                 var cobaltData = await cobaltRes.json();
                 if (cobaltData && (cobaltData.status === 'stream' || cobaltData.status === 'redirect' || cobaltData.url)) {
                     var downloadUrl = cobaltData.url || (cobaltData.picker && cobaltData.picker[0] ? cobaltData.picker[0].url : url);
@@ -741,7 +767,7 @@
                 }
 
                 card.style.display = 'grid';
-                showToast("تم جلب الصورة المصغرة وروابط التحميل بنجاح!");
+                showToast("تم جلب الصورة المصغرة وروابط التحميل بجودة " + quality + "p!");
             } catch (err) {
                 var thumbUrl = 'https://img.youtube.com/vi/' + videoId + '/maxresdefault.jpg';
                 document.getElementById('ytCover').src = thumbUrl;
