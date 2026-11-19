@@ -113,7 +113,7 @@
 
         <div class="nav-menu">
             <div class="nav-category">التريند والأسعار المباشرة</div>
-            <a class="nav-item active" onclick="switchTab('tab-gold', this)">
+            <a class="nav-item active" onclick="switchTab('tab-gold', this); showGoldTab('prices')">
                 <i class="fa-solid fa-coins" style="color: var(--gold);"></i>
                 <span>بورصة الذهب والدولار</span>
                 <span class="badge-live">مباشر</span>
@@ -207,7 +207,11 @@
                             <p>أسعار لحظية مسحوبة من البورصة العالمية والبنوك المركزية</p>
                         </div>
                     </div>
-                    <button class="cyber-btn btn-gold" style="width: auto; padding: 10px 20px; font-size: 0.9rem;" onclick="fetchLiveMarketData()">
+                    <div class="nav-menu" style="margin: 15px 0; padding: 8px 0; background: var(--bg-card); border-radius: 8; border: 1px solid var(--border-color);">
+                        <a class="nav-item" onclick="showGoldTab('prices')">أسعار الذهب</a>
+                        <a class="nav-item" onclick="showGoldTab('rates')">أسعار الصرف</a>
+                    </div>
+                    <button class="cyber-btn btn-gold" style="width: auto; padding: 10px 20px; font-size: 0.9rem; margin: 5px 0;" onclick="fetchLiveMarketData()">
                         <i class="fa-solid fa-arrows-rotate"></i> تحديث الأسعار الآن
                     </button>
                 </div>
@@ -241,93 +245,97 @@
                         <input type="number" id="customUsdRate" class="cyber-input" placeholder="اتركه فارغاً للسعر الرسمي للبنك" oninput="updateGoldUI()">
                     </div>
 
-                    <!-- Gold prices grid -->
-                    <h3 style="margin: 15px 0 10px; color: var(--gold); font-size: 1.1rem;"><i class="fa-solid fa-ring"></i> أسعار جرام الذهب اليوم (بدون مصنعية):</h3>
-                    <div class="market-grid">
-                        <div class="price-card gold-theme">
-                            <h4><span>عيار 24 (نقي)</span> <i class="fa-solid fa-crown" style="color: var(--gold);"></i></h4>
-                            <div class="val" id="gold24">...</div>
-                            <span class="unit" id="gold24Unit">Workة محلية</span>
-                        </div>
-                        <div class="price-card gold-theme" style="border-color: var(--primary); box-shadow: var(--neon-shadow);">
-                            <h4><span style="color: var(--primary); font-weight: bold;">عيار 21 (الأكثر مبيعاً)</span> <i class="fa-solid fa-fire" style="color: var(--primary);"></i></h4>
-                            <div class="val" id="gold21" style="color: var(--primary);">...</div>
-                            <span class="unit" id="gold21Unit">Workة محلية</span>
-                        </div>
-                        <div class="price-card gold-theme">
-                            <h4><span>عيار 18</span> <i class="fa-solid fa-gem" style="color: var(--gold);"></i></h4>
-                            <div class="val" id="gold18">...</div>
-                            <span class="unit" id="gold18Unit">Workة محلية</span>
-                        </div>
-                        <div class="price-card gold-theme">
-                            <h4><span>الجنيه الذهب (8 جرام)</span> <i class="fa-solid fa-coins" style="color: var(--gold);"></i></h4>
-                            <div class="val" id="goldPound">...</div>
-                            <span class="unit" id="goldPoundUnit">Workة محلية</span>
+                    <!-- Tab content: Gold Prices -->
+                    <div id="goldPricesTab" style="display: block;">
+                        <h3 style="margin: 15px 0 10px; color: var(--gold); font-size: 1.1rem;"><i class="fa-solid fa-ring"></i> أسعار جرام الذهب اليوم (بدون مصنعية):</h3>
+                        <div class="market-grid">
+                            <div class="price-card gold-theme">
+                                <h4><span>عيار 24 (نقي)</span> <i class="fa-solid fa-crown" style="color: var(--gold);"></i></h4>
+                                <div class="val" id="gold24">...</div>
+                                <span class="unit" id="gold24Unit">Workة محلية</span>
+                            </div>
+                            <div class="price-card gold-theme" style="border-color: var(--primary); box-shadow: var(--neon-shadow);">
+                                <h4><span style="color: var(--primary); font-weight: bold;">عيار 21 (الأكثر مبيعاً)</span> <i class="fa-solid fa-fire" style="color: var(--primary);"></i></h4>
+                                <div class="val" id="gold21" style="color: var(--primary);">...</div>
+                                <span class="unit" id="gold21Unit">Workة محلية</span>
+                            </div>
+                            <div class="price-card gold-theme">
+                                <h4><span>عيار 18</span> <i class="fa-solid fa-gem" style="color: var(--gold);"></i></h4>
+                                <div class="val" id="gold18">...</div>
+                                <span class="unit" id="gold18Unit">Workة محلية</span>
+                            </div>
+                            <div class="price-card gold-theme">
+                                <h4><span>الجنيه الذهب (8 جرام)</span> <i class="fa-solid fa-coins" style="color: var(--gold);"></i></h4>
+                                <div class="val" id="goldPound">...</div>
+                                <span class="unit" id="goldPoundUnit">Workة محلية</span>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Exchange rates grid -->
-                    <h3 style="margin: 30px 0 10px; color: var(--success); font-size: 1.1rem;"><i class="fa-solid fa-money-bill-transfer"></i> أسعار الصرف الرسمية أمام الدولار الأمريكي:</h3>
-                    <div class="market-grid">
-                        <div class="price-card currency-theme">
-                            <h4><span>الدولار مقابل الجنيه المصري</span> <i class="fa-solid fa-building-columns"></i></h4>
-                            <div class="val" id="rateEGP">...</div>
-                            <span class="unit" id="rateEGPUnit">جنيه مصري</span>
-                        </div>
-                        <div class="price-card currency-theme">
-                            <h4><span>الدولار مقابل الريال السعودي</span> <i class="fa-solid fa-building-columns"></i></h4>
-                            <div class="val" id="rateSAR">...</div>
-                            <span class="unit" id="rateSARUnit">ريال سعودي</span>
-                        </div>
-                        <div class="price-card currency-theme">
-                            <h4><span>الدولار مقابل الدرهم الإماراتي</span> <i class="fa-solid fa-building-columns"></i></h4>
-                            <div class="val" id="rateAED">...</div>
-                            <span class="unit" id="rateAEDUnit">درهم إماراتي</span>
-                        </div>
-                        <div class="price-card currency-theme">
-                            <h4><span>الدولار مقابل الريال القطري</span> <i class="fa-solid fa-building-columns"></i></h4>
-                            <div class="val" id="rateQAR">...</div>
-                            <span class="unit" id="rateQARUnit">ريال قطري</span>
-                        </div>
-                        <div class="price-card currency-theme">
-                            <h4><span>الدولار مقابل الدينار الكويتي</span> <i class="fa-solid fa-building-columns"></i></h4>
-                            <div class="val" id="rateBHD">...</div>
-                            <span class="unit" id="rateBHDUnit">دينار كويتي</span>
-                        </div>
-                        <div class="price-card currency-theme">
-                            <h4><span>الدولار مقابل الريال العماني</span> <i class="fa-solid fa-building-columns"></i></h4>
-                            <div class="val" id="rateOMR">...</div>
-                            <span class="unit" id="rateOMRUnit">ريال عماني</span>
-                        </div>
-                        <div class="price-card currency-theme">
-                            <h4><span>الدولار مقابل الريال اليمني</span> <i class="fa-solid fa-building-columns"></i></h4>
-                            <div class="val" id="rateYER">...</div>
-                            <span class="unit" id="rateYERUnit">ريال يمني</span>
-                        </div>
-                        <div class="price-card currency-theme">
-                            <h4><span>الدولار مقابل الدينار الأردني</span> <i class="fa-solid fa-building-columns"></i></h4>
-                            <div class="val" id="rateJOD">...</div>
-                            <span class="unit" id="rateJODUnit">دينار أردني</span>
-                        </div>
-                        <div class="price-card currency-theme">
-                            <h4><span>الدولار مقابل الليرة السورية</span> <i class="fa-solid fa-building-columns"></i></h4>
-                            <div class="val" id="rateSYP">...</div>
-                            <span class="unit" id="rateSYPUnit">ليرة سورية</span>
-                        </div>
-                        <div class="price-card currency-theme">
-                            <h4><span>الدولار مقابل الدينار التونسي</span> <i class="fa-solid fa-building-columns"></i></h4>
-                            <div class="val" id="rateTND">...</div>
-                            <span class="unit" id="rateTNDUnit">دينار تونسي</span>
-                        </div>
-                        <div class="price-card currency-theme">
-                            <h4><span>الدولار مقابل الدرهم المغربي</span> <i class="fa-solid fa-building-columns"></i></h4>
-                            <div class="val" id="rateMAD">...</div>
-                            <span class="unit" id="rateMADUnit">درهم مغربي</span>
-                        </div>
-                        <div class="price-card currency-theme">
-                            <h4><span>الدولار مقابل الدينار الجزائري</span> <i class="fa-solid fa-building-columns"></i></h4>
-                            <div class="val" id="rateDZD">...</div>
-                            <span class="unit" id="rateDZDUnit">دينار جزائري</span>
+                    <!-- Tab content: Exchange Rates -->
+                    <div id="goldRatesTab" style="display: none;">
+                        <h3 style="margin: 30px 0 10px; color: var(--success); font-size: 1.1rem;"><i class="fa-solid fa-money-bill-transfer"></i> أسعار الصرف الرسمية أمام الدولار الأمريكي:</h3>
+                        <div class="market-grid">
+                            <div class="price-card currency-theme">
+                                <h4><span>الدولار مقابل الجنيه المصري</span> <i class="fa-solid fa-building-columns"></i></h4>
+                                <div class="val" id="rateEGP">...</div>
+                                <span class="unit" id="rateEGPUnit">جنيه مصري</span>
+                            </div>
+                            <div class="price-card currency-theme">
+                                <h4><span>الدولار مقابل الريال السعودي</span> <i class="fa-solid fa-building-columns"></i></h4>
+                                <div class="val" id="rateSAR">...</div>
+                                <span class="unit" id="rateSARUnit">ريال سعودي</span>
+                            </div>
+                            <div class="price-card currency-theme">
+                                <h4><span>الدولار مقابل الدرهم الإماراتي</span> <i class="fa-solid fa-building-columns"></i></h4>
+                                <div class="val" id="rateAED">...</div>
+                                <span class="unit" id="rateAEDUnit">درهم إماراتي</span>
+                            </div>
+                            <div class="price-card currency-theme">
+                                <h4><span>الدولار مقابل الريال القطري</span> <i class="fa-solid fa-building-columns"></i></h4>
+                                <div class="val" id="rateQAR">...</div>
+                                <span class="unit" id="rateQARUnit">ريال قطري</span>
+                            </div>
+                            <div class="price-card currency-theme">
+                                <h4><span>الدولار مقابل الدينار الكويتي</span> <i class="fa-solid fa-building-columns"></i></h4>
+                                <div class="val" id="rateBHD">...</div>
+                                <span class="unit" id="rateBHDUnit">دينار كويتي</span>
+                            </div>
+                            <div class="price-card currency-theme">
+                                <h4><span>الدولار مقابل الريال العماني</span> <i class="fa-solid fa-building-columns"></i></h4>
+                                <div class="val" id="rateOMR">...</div>
+                                <span class="unit" id="rateOMRUnit">ريال عماني</span>
+                            </div>
+                            <div class="price-card currency-theme">
+                                <h4><span>الدولار مقابل الريال اليمني</span> <i class="fa-solid fa-building-columns"></i></h4>
+                                <div class="val" id="rateYER">...</div>
+                                <span class="unit" id="rateYERUnit">ريال يمني</span>
+                            </div>
+                            <div class="price-card currency-theme">
+                                <h4><span>الدولار مقابل الدينار الأردني</span> <i class="fa-solid fa-building-columns"></i></h4>
+                                <div class="val" id="rateJOD">...</div>
+                                <span class="unit" id="rateJODUnit">دينار أردني</span>
+                            </div>
+                            <div class="price-card currency-theme">
+                                <h4><span>الدولار مقابل الليرة السورية</span> <i class="fa-solid fa-building-columns"></i></h4>
+                                <div class="val" id="rateSYP">...</div>
+                                <span class="unit" id="rateSYPUnit">ليرة سورية</span>
+                            </div>
+                            <div class="price-card currency-theme">
+                                <h4><span>الدولار مقابل الدينار التونسي</span> <i class="fa-solid fa-building-columns"></i></h4>
+                                <div class="val" id="rateTND">...</div>
+                                <span class="unit" id="rateTNDUnit">دينار تونسي</span>
+                            </div>
+                            <div class="price-card currency-theme">
+                                <h4><span>الدولار مقابل الدرهم المغربي</span> <i class="fa-solid fa-building-columns"></i></h4>
+                                <div class="val" id="rateMAD">...</div>
+                                <span class="unit" id="rateMADUnit">درهم مغربي</span>
+                            </div>
+                            <div class="price-card currency-theme">
+                                <h4><span>الدولار مقابل الدينار الجزائري</span> <i class="fa-solid fa-building-columns"></i></h4>
+                                <div class="val" id="rateDZD">...</div>
+                                <span class="unit" id="rateDZDUnit">دينار جزائري</span>
+                            </div>
                         </div>
                     </div>
 
@@ -630,6 +638,22 @@
     </div>
 
     <script>
+        function showGoldTab(tabName) {
+            // Hide all tab contents
+            document.getElementById('goldPricesTab').style.display = 'none';
+            document.getElementById('goldRatesTab').style.display = 'none';
+            // Show selected tab
+            if (tabName === 'prices') {
+                document.getElementById('goldPricesTab').style.display = 'block';
+            } else if (tabName === 'rates') {
+                document.getElementById('goldRatesTab').style.display = 'block';
+            }
+            // Update active state for gold sub-tabs
+            var goldTabs = document.querySelectorAll('#tab-gold .nav-item');
+            goldTabs.forEach(function(t) { t.classList.remove('active'); });
+            event.target.classList.add('active');
+        }
+
         function switchTab(tabId, element) {
             document.querySelectorAll('.tool-panel').forEach(function(p) { p.classList.remove('active'); });
             document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
@@ -705,6 +729,61 @@
 
         function updateGoldUI() {
             var country = document.getElementById('countrySelect').value;
+            var customUsd = parseFloat(document.getElementById('customUsdRate').value);
+            var activeUsdRate = (customUsd && customUsd > 0) ? customUsd : liveRates[country];
+            var selectedCountryName = countryNames[country] || country;
+
+            // Update gold price units
+            document.getElementById('gold24Unit').innerText = selectedCountryName;
+            document.getElementById('gold21Unit').innerText = selectedCountryName;
+            document.getElementById('gold18Unit').innerText = selectedCountryName;
+            document.getElementById('goldPoundUnit').innerText = selectedCountryName;
+
+            // Update exchange rate units
+            document.getElementById('rateEGPUnit').innerText = country === 'EGP' ? 'جنيه مصري' : selectedCountryName;
+            document.getElementById('rateSARUnit').innerText = country === 'SAR' ? 'ريال سعودي' : selectedCountryName;
+            document.getElementById('rateAEDUnit').innerText = country === 'AED' ? 'درهم إماراتي' : selectedCountryName;
+            document.getElementById('rateQARUnit').innerText = country === 'QAR' ? 'ريال قطري' : selectedCountryName;
+            document.getElementById('rateBHDUnit').innerText = country === 'BHD' ? 'دينار كويتي' : selectedCountryName;
+            document.getElementById('rateOMRUnit').innerText = country === 'OMR' ? 'ريال عماني' : selectedCountryName;
+            document.getElementById('rateYERUnit').innerText = country === 'YER' ? 'ريال يمني' : selectedCountryName;
+            document.getElementById('rateJODUnit').innerText = country === 'JOD' ? 'دينار أردني' : selectedCountryName;
+            document.getElementById('rateSYPUnit').innerText = country === 'SYP' ? 'ليرة سورية' : selectedCountryName;
+            document.getElementById('rateTNDUnit').innerText = country === 'TND' ? 'دينار تونسي' : selectedCountryName;
+            document.getElementById('rateMADUnit').innerText = country === 'MAD' ? 'درهم مغربي' : selectedCountryName;
+            document.getElementById('rateDZDUnit').innerText = country === 'DZD' ? 'دينار جزائري' : selectedCountryName;
+
+            // Calculate gold prices
+            var gram24USD = globalGoldOunceUSD / 31.1035;
+            var gram24Local = gram24USD * activeUsdRate;
+            var gram21Local = gram24Local * (21 / 24);
+            var gram18Local = gram24Local * (18 / 24);
+            var goldPoundLocal = gram21Local * 8;
+
+            document.getElementById('gold24').innerText = gram24Local.toFixed(1);
+            document.getElementById('gold21').innerText = gram21Local.toFixed(1);
+            document.getElementById('gold18').innerText = gram18Local.toFixed(1);
+            document.getElementById('goldPound').innerText = Math.round(goldPoundLocal).toLocaleString();
+
+            // Update exchange rates display
+            document.getElementById('rateEGP').innerText = liveRates.EGP.toFixed(2);
+            document.getElementById('rateSAR').innerText = liveRates.SAR.toFixed(2);
+            document.getElementById('rateAED').innerText = liveRates.AED.toFixed(2);
+            document.getElementById('rateQAR').innerText = liveRates.QAR.toFixed(2);
+            document.getElementById('rateBHD').innerText = liveRates.BHD.toFixed(4);
+            document.getElementById('rateOMR').innerText = liveRates.OMR.toFixed(4);
+            document.getElementById('rateYER').innerText = liveRates.YER.toFixed(1);
+            document.getElementById('rateJOD').innerText = liveRates.JOD.toFixed(4);
+            document.getElementById('rateSYP').innerText = liveRates.SYP.toFixed(1);
+            document.getElementById('rateTND').innerText = liveRates.TND.toFixed(3);
+            document.getElementById('rateMAD').innerText = liveRates.MAD.toFixed(2);
+            document.getElementById('rateDZD').innerText = liveRates.DZD.toFixed(1);
+
+            // Update ticker at top
+            document.getElementById('topGoldOunce').innerText = globalGoldOunceUSD.toFixed(1) + "$";
+            document.getElementById('topUsdEgp').innerText = liveRates.EGP.toFixed(2) + " ج.م";
+            document.getElementById('topUsdSar').innerText = liveRates.SAR.toFixed(2) + " ر.س";
+        }
             var customUsd = parseFloat(document.getElementById('customUsdRate').value);
             var activeUsdRate = (customUsd && customUsd > 0) ? customUsd : liveRates[country];
             var selectedCountryName = countryNames[country] || country;
@@ -1037,6 +1116,7 @@
 
         window.onload = function() {
             fetchLiveMarketData();
+            showGoldTab('prices');
             generateMassiveDecorations();
             generateStrongPass();
         };
