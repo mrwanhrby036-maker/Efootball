@@ -138,7 +138,8 @@ module.exports = async (req, res) => {
         return;
     }
 
-    const { url, hd: quality } = req.query;
+    const url = req.query.url;
+    const quality = req.query.quality || req.query.hd || '';
 
     if (!url || Array.isArray(url) || typeof url !== 'string') {
         res.status(400).json({ error: 'رابط الفيديو مطلوب' });
