@@ -25,7 +25,7 @@
 
     <!-- Verification & Ads -->
     <meta name="google-site-verification" content="oFipA5OVdHadbanYm0b6JZR6tzlR4H_qsi6xTAYBLWM" />
-    <!-- AutoTag advertising: initialized after the provider SDK loads. -->
+    <!-- Banner advertising: initialized after the provider SDK loads. -->
     <script defer src="/assets/js/ads.js"></script>
 
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%2305070a'/%3E%3Ctext x='50' y='68' font-size='60' text-anchor='middle' fill='%2310b981'%3EB%3C/text%3E%3C/svg%3E">
@@ -211,6 +211,31 @@ button, a, input, select, .cyber-btn, .nav-item, .tool-card, .price-card, .cyber
 /* ─────────────────────────────────────────────────────────
    MAIN CONTENT & HEADER
 ───────────────────────────────────────────────────────── */
+.ad-banner {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    margin-bottom: 25px;
+}
+
+.ad-banner-label {
+    display: block;
+    margin-bottom: 6px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 0.7rem;
+}
+
+.ad-banner-slot {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    min-height: 90px;
+    overflow-x: auto;
+    direction: ltr;
+}
+
 .main-content {
     flex-grow: 1;
     margin-right: 290px;
@@ -1677,6 +1702,12 @@ select.cyber-select {
             </nav>
 
             <!-- BMI Calculator Tool Panel -->
+            <!-- Fixed banner placement; the provider supplies the actual creative. -->
+            <aside class="ad-banner" aria-label="إعلان">
+                <span class="ad-banner-label">إعلان</span>
+                <div id="nexus-banner" class="ad-banner-slot"></div>
+            </aside>
+
             <section class="tool-panel">
                 <div class="panel-header">
                     <div class="panel-title">
