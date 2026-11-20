@@ -2119,7 +2119,7 @@ select.cyber-select {
                                     </button>
                                 </div>
                             </div>
-                            <textarea id="inputKeyboardText" class="fixer-textarea" placeholder="اكتب أو الصق النص هنا، مثال: hgpl] ggi vj hguhgldk..." oninput="debouncedKeyboardFix()" autofocus>hgpl] ggi vj hguhgldk</textarea>
+                            <textarea id="inputKeyboardText" class="fixer-textarea" placeholder="اكتب أو الصق النص هنا، مثال: hgpl] ggi vf hguhgldk..." oninput="debouncedKeyboardFix()" autofocus>hgpl] ggi vf hguhgldk</textarea>
                             <div class="fixer-pane-footer">
                                 <span>الأحرف: <strong id="inCharCount">0</strong></span>
                                 <span>الكلمات: <strong id="inWordCount">0</strong></span>
@@ -2167,22 +2167,22 @@ select.cyber-select {
                             <div class="preset-chip" onclick="loadPreset('hgpl] ggi')">
                                 <code>hgpl] ggi</code> <span class="chip-arrow">➔</span> <span>الحمد لله</span>
                             </div>
-                            <div class="preset-chip" onclick="loadPreset('sghl ugd;l dhughldk')">
+                            <div class="preset-chip" onclick="loadPreset('sghl ugd;l')">
                                 <code>sghl ugd;l</code> <span class="chip-arrow">➔</span> <span>سلام عليكم</span>
                             </div>
-                            <div class="preset-chip" onclick="loadPreset('lhahx hggi jfhv; hgvplk')">
-                                <code>lhahx hggi</code> <span class="chip-arrow">➔</span> <span>ماشاء الله</span>
+                            <div class="preset-chip" onclick="loadPreset('lh ahx hggi')">
+                                <code>lh ahx hggi</code> <span class="chip-arrow">➔</span> <span>ما شاء الله</span>
                             </div>
-                            <div class="preset-chip" onclick="loadPreset('lwv hguf,v')">
+                            <div class="preset-chip" onclick="loadPreset('lwv')">
                                 <code>lwv</code> <span class="chip-arrow">➔</span> <span>مصر</span>
                             </div>
-                            <div class="preset-chip" onclick="loadPreset('اثممخ ثرثقغخىث')">
+                            <div class="preset-chip" onclick="loadPreset('اثممخ')">
                                 <code>اثممخ</code> <span class="chip-arrow">➔</span> <span>hello</span>
                             </div>
                             <div class="preset-chip" onclick="loadPreset('صصصزلخخلمثزؤخة')">
                                 <code>صصصزلخخلمثزؤخة</code> <span class="chip-arrow">➔</span> <span>www.google.com</span>
                             </div>
-                            <div class="preset-chip" onclick="loadPreset('g;k hggi vfd')">
+                            <div class="preset-chip" onclick="loadPreset('g;k hggi')">
                                 <code>g;k hggi</code> <span class="chip-arrow">➔</span> <span>لكن الله</span>
                             </div>
                             <div class="preset-chip" onclick="loadPreset('wfp hgodv')">
@@ -2773,19 +2773,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
     </script>
-    <script>
-        function updateTesterCount() {
-            var val = document.getElementById('charTester').value;
-            var display = document.getElementById('charCountDisplay');
-            if (display) {
-                display.innerText = 'عدد الأحرف الملصقة: ' + val.length + ' (طول النص: ' + val.length + ' حرف)';
-            }
-        }
-
-        document.getElementById('charTester').addEventListener('input', updateTesterCount);
-    </script>
-
-
     <script>
 /**
  * NEXUS Keyboard Fixer Engine
