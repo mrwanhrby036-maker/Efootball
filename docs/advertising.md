@@ -9,9 +9,11 @@ The banner loader and rendering call are embedded directly in each page's HTML. 
 - SDK: `https://acscdn.com/script/aclib.js`
 - SDK script element ID: `aclib`
 - Public banner zone ID supplied by the owner: `12474522`
-- Invocation: `window.aclib.runBanner({ zoneId: '12474522' })`
+- Invocation: `window.aclib.runBanner({ zoneId: '12474522', renderIn: '#nexus-banner' })`
 
-The inline loader asynchronously loads the SDK, then inserts a self-contained inline rendering script into the slot. This preserves the script-parent placement semantics of the owner's embed rather than invoking it from the document head. Duplicate initialization and SDK-load errors do not interrupt the tools. The `data-ad-state` value `requested` only means that the call was made, not that the network supplied an ad.
+The inline loader asynchronously loads the SDK, then calls it with an explicit `renderIn` selector. Placement no longer relies on `document.currentScript` or a dynamically injected second script. The slot establishes a relative positioning context, an isolated stacking context and layout/paint containment, so positioned descendants remain contained instead of covering other tools. This is layout containment, not a security sandbox: provider code running in the page could still append content elsewhere.
+
+Duplicate initialization and SDK-load errors do not interrupt the tools. The `data-ad-state` value `requested` only means that the call was made, not that the network supplied an ad. There is no site-owned close button, dismissal handler or automatic reinsertion after dismissal. Provider-owned close controls must not be hidden or disabled; if the zone itself serves a floating/dismissible format, change it to an in-page display banner in the provider dashboard.
 
 The former AutoTag call is no longer used. AdSense loaders, slots, push calls and the obsolete Google seller record remain removed; Google Search verification is preserved.
 
@@ -28,6 +30,6 @@ The former AutoTag call is no longer used. AdSense loaders, slots, push calls an
 
 ## Verification
 
-Verification is run using in-memory Node checks, without committing separate JavaScript test files. Checks cover page placements, SDK load ordering, the exact zone ID, execution from inside the slot, duplicate prevention, missing/blocked SDK behavior, provider exceptions, and the scoped CSP. Frontend code is inline in HTML; the pre-existing `server.js` and `api/tiktok.js` remain server-side and are not moved into browser pages.
+Verification is run using in-memory Node checks, without committing separate JavaScript test files. Checks cover page placements, SDK load ordering, the exact zone ID, the explicit render target and CSS containment, duplicate prevention, missing/blocked SDK behavior, provider exceptions, and the scoped CSP. Frontend code is inline in HTML; the pre-existing `server.js` and `api/tiktok.js` remain server-side and are not moved into browser pages.
 
 After deployment, test with a normal browser on the approved domain, inspect Network/Console, and distinguish blocked SDK requests, CSP errors, provider errors and legitimate no-fill responses. Never click live ads for testing.

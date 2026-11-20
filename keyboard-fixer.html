@@ -227,6 +227,9 @@ button, a, input, select, .cyber-btn, .nav-item, .tool-card, .price-card, .cyber
 }
 
 .ad-banner-slot {
+    position: relative;
+    isolation: isolate;
+    contain: layout paint;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -2071,61 +2074,43 @@ select.cyber-select {
                 <span class="ad-banner-label">إعلان</span>
                 <div id="nexus-banner" class="ad-banner-slot">
                     <script data-banner-loader>
-                    /* Advertising zone IDs are public identifiers, not API credentials. */
-                    (function () {
-                        'use strict';
-
-                        var slot = document.currentScript && document.currentScript.parentNode;
-                        if (!slot || slot.id !== 'nexus-banner' || document.getElementById('aclib')) return;
-
-                        function renderBanner() {
+                        (function () {
                             'use strict';
 
-                            var script = document.currentScript;
-                            var slot = script && script.parentNode;
-                            if (!slot || slot.id !== 'nexus-banner' || slot.dataset.adState === 'requested') return;
+                            var slot = document.getElementById('nexus-banner');
+                            if (!slot || document.getElementById('aclib')) return;
 
-                            if (!window.aclib || typeof window.aclib.runBanner !== 'function') {
+                            var sdk = document.createElement('script');
+                            sdk.id = 'aclib';
+                            sdk.type = 'text/javascript';
+                            sdk.src = 'https://acscdn.com/script/aclib.js';
+                            sdk.async = true;
+                            var requested = false;
+                            sdk.onload = function () {
+                                if (requested) return;
+                                if (!window.aclib || typeof window.aclib.runBanner !== 'function') {
+                                    slot.dataset.adState = 'unavailable';
+                                    console.warn('Banner: provider API is unavailable.');
+                                    return;
+                                }
+                                requested = true;
+                                slot.dataset.adState = 'requested';
+                                try {
+                                    window.aclib.runBanner({
+                                        zoneId: '12474522',
+                                        renderIn: '#nexus-banner'
+                                    });
+                                } catch (error) {
+                                    slot.dataset.adState = 'unavailable';
+                                    console.warn('Banner: initialization failed.');
+                                }
+                            };
+                            sdk.onerror = function () {
                                 slot.dataset.adState = 'unavailable';
-                                console.warn('Banner: provider API is unavailable.');
-                                return;
-                            }
-                            // Requested is not a claim of fill: only the provider can supply an ad.
-                            slot.dataset.adState = 'requested';
-                            try {
-                                window.aclib.runBanner({ zoneId: '12474522' });
-                            } catch (error) {
-                                slot.dataset.adState = 'unavailable';
-                                console.warn('Banner: initialization failed.');
-                            }
-                        }
-
-                        var sdk = document.createElement('script');
-                        sdk.id = 'aclib';
-                        sdk.type = 'text/javascript';
-                        sdk.src = 'https://acscdn.com/script/aclib.js';
-                        sdk.async = true;
-                        var requested = false;
-                        sdk.onload = function () {
-                            if (requested) return;
-                            if (!window.aclib || typeof window.aclib.runBanner !== 'function') {
-                                slot.dataset.adState = 'unavailable';
-                                console.warn('Banner: provider API is unavailable.');
-                                return;
-                            }
-                            requested = true;
-                            // Execute the call from a script INSIDE the slot. Providers may locate
-                            // their banner using document.currentScript.parentNode, as in the supplied embed.
-                            var caller = document.createElement('script');
-                            caller.textContent = '(' + renderBanner.toString() + ')();';
-                            slot.appendChild(caller);
-                        };
-                        sdk.onerror = function () {
-                            slot.dataset.adState = 'unavailable';
-                            console.warn('Banner: SDK failed to load or was blocked.');
-                        };
-                        document.head.appendChild(sdk);
-                    }());
+                                console.warn('Banner: SDK failed to load or was blocked.');
+                            };
+                            document.head.appendChild(sdk);
+                        }());
                     </script>
                 </div>
             </aside>
