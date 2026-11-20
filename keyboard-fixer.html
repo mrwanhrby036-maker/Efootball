@@ -25,7 +25,7 @@
 
     <!-- Verification & Ads -->
     <meta name="google-site-verification" content="oFipA5OVdHadbanYm0b6JZR6tzlR4H_qsi6xTAYBLWM" />
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6717057078707906" crossorigin="anonymous"></script>
+    <!-- Banner advertising is initialized inline at its placement below. -->
 
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%2305070a'/%3E%3Ctext x='50' y='68' font-size='60' text-anchor='middle' fill='%2300f2fe'%3E%D9%83%3C/text%3E%3C/svg%3E">
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=Orbitron:wght@600;800&display=swap" rel="stylesheet">
@@ -211,6 +211,34 @@ button, a, input, select, .cyber-btn, .nav-item, .tool-card, .price-card, .cyber
 /* ─────────────────────────────────────────────────────────
    MAIN CONTENT & HEADER
 ───────────────────────────────────────────────────────── */
+.ad-banner {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    margin-bottom: 25px;
+}
+
+.ad-banner-label {
+    display: block;
+    margin-bottom: 6px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 0.7rem;
+}
+
+.ad-banner-slot {
+    position: relative;
+    isolation: isolate;
+    contain: layout paint;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    min-height: 90px;
+    overflow-x: auto;
+    direction: ltr;
+}
+
 .main-content {
     flex-grow: 1;
     margin-right: 290px;
@@ -325,20 +353,6 @@ button, a, input, select, .cyber-btn, .nav-item, .tool-card, .price-card, .cyber
 .breadcrumb i.sep {
     font-size: 0.7rem;
     color: var(--border-color);
-}
-
-.ad-banner {
-    background: repeating-linear-gradient(45deg, #0b0f17, #0b0f17 10px, #111827 10px, #111827 20px);
-    border: 1px dashed var(--border-color);
-    min-height: 90px;
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-dim);
-    font-size: 0.85rem;
-    margin-bottom: 25px;
-    overflow: hidden;
 }
 
 /* ─────────────────────────────────────────────────────────
@@ -2054,20 +2068,53 @@ select.cyber-select {
                 <span class="current">مُصحح الكيبورد الإنجليزي المعرب</span>
             </nav>
 
-            <!-- Responsive AdSense Banner -->
-            <div class="ad-banner" style="background: none; border: none; display: block; width: 100%; height: auto; margin-bottom: 25px;">
-                <ins class="adsbygoogle"
-                     style="display:block"
-                     data-ad-client="ca-pub-6717057078707906"
-                     data-ad-slot="8332346112"
-                     data-ad-format="auto"
-                     data-full-width-responsive="true"></ins>
-                <script>
-                     (adsbygoogle = window.adsbygoogle || []).push({});
-                </script>
-            </div>
-
             <!-- Keyboard Fixer Tool Panel -->
+            <!-- Fixed banner placement; the provider supplies the actual creative. -->
+            <aside class="ad-banner" aria-label="إعلان">
+                <span class="ad-banner-label">إعلان</span>
+                <div id="nexus-banner" class="ad-banner-slot">
+                    <script data-banner-loader>
+                        (function () {
+                            'use strict';
+
+                            var slot = document.getElementById('nexus-banner');
+                            if (!slot || document.getElementById('aclib')) return;
+
+                            var sdk = document.createElement('script');
+                            sdk.id = 'aclib';
+                            sdk.type = 'text/javascript';
+                            sdk.src = 'https://acscdn.com/script/aclib.js';
+                            sdk.async = true;
+                            var requested = false;
+                            sdk.onload = function () {
+                                if (requested) return;
+                                if (!window.aclib || typeof window.aclib.runBanner !== 'function') {
+                                    slot.dataset.adState = 'unavailable';
+                                    console.warn('Banner: provider API is unavailable.');
+                                    return;
+                                }
+                                requested = true;
+                                slot.dataset.adState = 'requested';
+                                try {
+                                    window.aclib.runBanner({
+                                        zoneId: '12474522',
+                                        renderIn: '#nexus-banner'
+                                    });
+                                } catch (error) {
+                                    slot.dataset.adState = 'unavailable';
+                                    console.warn('Banner: initialization failed.');
+                                }
+                            };
+                            sdk.onerror = function () {
+                                slot.dataset.adState = 'unavailable';
+                                console.warn('Banner: SDK failed to load or was blocked.');
+                            };
+                            document.head.appendChild(sdk);
+                        }());
+                    </script>
+                </div>
+            </aside>
+
             <section class="tool-panel">
                 <div class="panel-header">
                     <div class="panel-title">
@@ -2119,7 +2166,7 @@ select.cyber-select {
                                     </button>
                                 </div>
                             </div>
-                            <textarea id="inputKeyboardText" class="fixer-textarea" placeholder="اكتب أو الصق النص هنا، مثال: hgpl] ggi vj hguhgldk..." oninput="debouncedKeyboardFix()" autofocus>hgpl] ggi vj hguhgldk</textarea>
+                            <textarea id="inputKeyboardText" class="fixer-textarea" placeholder="اكتب أو الصق النص هنا، مثال: hgpl] ggi vf hguhgldk..." oninput="debouncedKeyboardFix()" autofocus>hgpl] ggi vf hguhgldk</textarea>
                             <div class="fixer-pane-footer">
                                 <span>الأحرف: <strong id="inCharCount">0</strong></span>
                                 <span>الكلمات: <strong id="inWordCount">0</strong></span>
@@ -2167,22 +2214,22 @@ select.cyber-select {
                             <div class="preset-chip" onclick="loadPreset('hgpl] ggi')">
                                 <code>hgpl] ggi</code> <span class="chip-arrow">➔</span> <span>الحمد لله</span>
                             </div>
-                            <div class="preset-chip" onclick="loadPreset('sghl ugd;l dhughldk')">
+                            <div class="preset-chip" onclick="loadPreset('sghl ugd;l')">
                                 <code>sghl ugd;l</code> <span class="chip-arrow">➔</span> <span>سلام عليكم</span>
                             </div>
-                            <div class="preset-chip" onclick="loadPreset('lhahx hggi jfhv; hgvplk')">
-                                <code>lhahx hggi</code> <span class="chip-arrow">➔</span> <span>ماشاء الله</span>
+                            <div class="preset-chip" onclick="loadPreset('lh ahx hggi')">
+                                <code>lh ahx hggi</code> <span class="chip-arrow">➔</span> <span>ما شاء الله</span>
                             </div>
-                            <div class="preset-chip" onclick="loadPreset('lwv hguf,v')">
+                            <div class="preset-chip" onclick="loadPreset('lwv')">
                                 <code>lwv</code> <span class="chip-arrow">➔</span> <span>مصر</span>
                             </div>
-                            <div class="preset-chip" onclick="loadPreset('اثممخ ثرثقغخىث')">
+                            <div class="preset-chip" onclick="loadPreset('اثممخ')">
                                 <code>اثممخ</code> <span class="chip-arrow">➔</span> <span>hello</span>
                             </div>
                             <div class="preset-chip" onclick="loadPreset('صصصزلخخلمثزؤخة')">
                                 <code>صصصزلخخلمثزؤخة</code> <span class="chip-arrow">➔</span> <span>www.google.com</span>
                             </div>
-                            <div class="preset-chip" onclick="loadPreset('g;k hggi vfd')">
+                            <div class="preset-chip" onclick="loadPreset('g;k hggi')">
                                 <code>g;k hggi</code> <span class="chip-arrow">➔</span> <span>لكن الله</span>
                             </div>
                             <div class="preset-chip" onclick="loadPreset('wfp hgodv')">
@@ -2773,19 +2820,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
     </script>
-    <script>
-        function updateTesterCount() {
-            var val = document.getElementById('charTester').value;
-            var display = document.getElementById('charCountDisplay');
-            if (display) {
-                display.innerText = 'عدد الأحرف الملصقة: ' + val.length + ' (طول النص: ' + val.length + ' حرف)';
-            }
-        }
-
-        document.getElementById('charTester').addEventListener('input', updateTesterCount);
-    </script>
-
-
     <script>
 /**
  * NEXUS Keyboard Fixer Engine

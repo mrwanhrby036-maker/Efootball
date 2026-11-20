@@ -3,7 +3,15 @@ node_modules/
 
 # Environment Variables
 .env
+.env.*
+!.env.example
 
 # OS Metadata
 .DS_Store
 Thumbs.db
+
+# Keep testing and generated standalone frontend scripts out of Git
+/tests/
+/assets/js/
+*.test.js
+*.spec.js
