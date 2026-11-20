@@ -50,6 +50,9 @@ test('public pages, clean URLs, and MP4 remain accessible', async () => {
     assert.equal(video.status, 200);
     assert.equal(video.headers['content-type'], 'video/mp4');
     assert.equal(video.bytes, 2759481);
+    const adInitializer = await request('/assets/js/ads.js');
+    assert.equal(adInitializer.status, 200);
+    assert.equal(adInitializer.headers['content-type'], 'application/javascript; charset=utf-8');
     const head = await request('/keyboard-fixer', 'HEAD');
     assert.equal(head.status, 200);
     assert.equal(head.bytes, 0);
