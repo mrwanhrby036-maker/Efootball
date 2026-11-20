@@ -1,4 +1,5 @@
 {
+  "cleanUrls": true,
   "functions": {
     "api/tiktok.js": {
       "maxDuration": 10

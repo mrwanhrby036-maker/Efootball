@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>حاسبة العمر الدقيقة باليوم والشهر والسنة والتقويم الهجري وموعد عيد ميلادك | NEXUS</title>
+    <meta name="description" content="احسب عمرك بدقة متناهية بالسنوات والأشهر والأيام والساعات، وتعرف على عمرك بالتقويم الهجري، والوقت المتبقي ليوم ميلادك القادم، وبرجك الفلكي مجاناً وبسهولة.">
+    <meta name="keywords" content="حاسبة العمر, حساب العمر بدقة, حساب العمر بالهجري, كم عمري اليوم, حاسبة تاريخ الميلاد, اعرف برجي من تاريخ ميلادي, وقت عيد الميلاد">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://efootball-drab.vercel.app/age">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://efootball-drab.vercel.app/age">
+    <meta property="og:title" content="حاسبة العمر الدقيقة (ميلادي وهجري) | NEXUS ULTRA">
+    <meta property="og:description" content="احسب عمرك بالتفصيل بالسنوات والأشهر والأيام وتعرف على يوم ولادتك وبرجك وموعد عيد ميلادك.">
+    <meta property="og:image" content="https://efootball-drab.vercel.app/favicon.ico">
+    <meta property="og:site_name" content="NEXUS ULTRA">
+    <meta property="og:locale" content="ar_AR">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="حاسبة العمر الشاملة والأبراج | NEXUS">
+    <meta name="twitter:description" content="حساب دقيق للعمر الميلادي والهجري والأيام المتبقية لعيد ميلادك.">
+
+    <!-- Verification & Ads -->
+    <meta name="google-site-verification" content="oFipA5OVdHadbanYm0b6JZR6tzlR4H_qsi6xTAYBLWM" />
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6717057078707906" crossorigin="anonymous"></script>
+
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%2305070a'/%3E%3Ctext x='50' y='68' font-size='60' text-anchor='middle' fill='%2300f2fe'%3E%D8%B9%3C/text%3E%3C/svg%3E">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=Orbitron:wght@600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+
+    <!-- Structured Data (JSON-LD) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebApplication",
+          "name": "حاسبة العمر الزمنية الشاملة",
+          "url": "https://efootball-drab.vercel.app/age",
+          "description": "أداة حساب العمر الدقيقة بالسنوات والأشهر والأيام والتقويم الهجري ومعرفة البرج الفلكي واليوم المتبقي لميلادك.",
+          "applicationCategory": "UtilitiesApplication",
+          "operatingSystem": "All",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          }
+        },
+        {
+          "@type": "FAQPage",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "كيف أحسب عمري بالسنوات والأشهر والأيام بدقة؟",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "حدد يوم وشهر وسنة ميلادك في التقويم بالأعلى واضغط 'احسب الآن'. ستقوم الأداة بمقارنة تاريخ ميلادك مع التاريخ الحالي وحساب الفرق الزمني المفصل باليوم والشهر والسنة."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "ما الفرق بين العمر الميلادي والعمر الهجري؟",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "السنة الميلادية الشمسية تبلغ 365.25 يوماً، بينما السنة الهجرية القمرية تبلغ حوالي 354 يوماً (أقصر بحوالي 11 يوماً)، مما يعني أن العمر بالهجري يكون أكبر بحوالي 3% من العمر بالميلادي."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "كيف أعرف برجي الفلكي من تاريخ ميلادي؟",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "بمجرد إدخال تاريخ ميلادك، تكشف لك الأداة تلقائياً عن برجك الفلكي الغربي (مثل الحمل، الثور، الجوزاء) مع أهم صفاته الشخصية."
+              }
+            }
+          ]
+        },
+        {
+          "@type": "BreadcrumbList",
+          "itemListElement": [
+            {
+              "@type": "ListItem",
+              "position": 1,
+              "name": "الرئيسية",
+              "item": "https://efootball-drab.vercel.app/"
+            },
+            {
+              "@type": "ListItem",
+              "position": 2,
+              "name": "حاسبة العمر الشاملة",
+              "item": "https://efootball-drab.vercel.app/age"
+            }
+          ]
+        }
+      ]
+    }
+    </script>
+</head>
+<body>
+
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+        <div class="brand">
+            <a href="/">
+                <i class="fa-solid fa-layer-group"></i>
+                <div class="brand-text">
+                    <span class="brand-title">NEXUS ULTRA</span>
+                    <span><i class="fa-solid fa-circle" style="font-size: 0.5rem;"></i> متصل بالسيرفرات العالمية</span>
+                </div>
+            </a>
+        </div>
+
+        <div class="nav-menu">
+            <div class="nav-category">الرئيسية</div>
+            <a class="nav-item" href="/">
+                <i class="fa-solid fa-house"></i>
+                <span>جميع الأدوات</span>
+            </a>
+
+            <div class="nav-category">التريند والأسعار المباشرة</div>
+            <a class="nav-item" href="/gold">
+                <i class="fa-solid fa-coins" style="color: var(--gold);"></i>
+                <span>بورصة الذهب والدولار</span>
+                <span class="badge-live">مباشر</span>
+            </a>
+            <a class="nav-item" href="/tiktok">
+                <i class="fa-brands fa-tiktok" style="color: var(--tiktok);"></i>
+                <span>تحميل فيديو تيك توك</span>
+                <span class="badge-live">نشط</span>
+            </a>
+            <a class="nav-item" href="/youtube">
+                <i class="fa-brands fa-youtube" style="color: #ff0000;"></i>
+                <span>تحميل يوتيوب وصور مصغرة</span>
+                <span class="badge-live">جديد</span>
+            </a>
+
+            <div class="nav-category">أدوات الجيمرز والسوشيال</div>
+            <a class="nav-item" href="/names">
+                <i class="fa-solid fa-wand-magic-sparkles"></i>
+                <span>محرك الزخرفة (275+)</span>
+            </a>
+            <a class="nav-item" href="/hidden-char">
+                <i class="fa-solid fa-ghost"></i>
+                <span>المسافة المخفية للألعاب</span>
+            </a>
+            <a class="nav-item" href="/whatsapp">
+                <i class="fa-brands fa-whatsapp"></i>
+                <span>صانع رابط واتساب</span>
+            </a>
+            <a class="nav-item" href="/password">
+                <i class="fa-solid fa-shield-halved"></i>
+                <span>مولد كلمات المرور</span>
+            </a>
+
+            <div class="nav-category">الحاسبات الذكية</div>
+            <a class="nav-item active" href="/age">
+                <i class="fa-solid fa-calendar-days"></i>
+                <span>حاسبة العمر الشاملة</span>
+            </a>
+            <a class="nav-item" href="/bmi">
+                <i class="fa-solid fa-weight-scale"></i>
+                <span>حاسبة الوزن المثالي</span>
+            </a>
+            <a class="nav-item" href="/discount">
+                <i class="fa-solid fa-percent"></i>
+                <span>حاسبة الخصم والضريبة</span>
+            </a>
+        </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+        <!-- Top Live Ticker & Header -->
+        <header class="top-header">
+            <div class="live-ticker">
+                <div class="ticker-item">
+                    <i class="fa-solid fa-globe"></i>
+                    <span>أوقية الذهب: <span id="topGoldOunce" class="ticker-val">2,685.5$</span></span>
+                </div>
+                <div class="ticker-item">
+                    <i class="fa-solid fa-dollar-sign" style="color: var(--success);"></i>
+                    <span>مصر: <span id="topUsdEgp" class="ticker-val">49.60 ج.م</span></span>
+                </div>
+                <div class="ticker-item">
+                    <i class="fa-solid fa-dollar-sign" style="color: var(--success);"></i>
+                    <span>السعودية: <span id="topUsdSar" class="ticker-val">3.75 ر.س</span></span>
+                </div>
+            </div>
+            <div class="top-nav-bar">
+                <a href="/" class="top-nav-link"><i class="fa-solid fa-house"></i> الرئيسية</a>
+                <span style="font-size: 0.8rem; color: var(--text-dim); display: flex; align-items: center; gap: 6px;">
+                    <i class="fa-solid fa-calendar-check" style="color: var(--primary);"></i> حساب زمني فلكي دقيق
+                </span>
+            </div>
+        </header>
+
+        <div class="workspace">
+            <!-- Breadcrumb Navigation -->
+            <nav class="breadcrumb" aria-label="مسار التنقل">
+                <a href="/"><i class="fa-solid fa-house"></i> الرئيسية</a>
+                <i class="fa-solid fa-chevron-left sep"></i>
+                <span class="current">حاسبة العمر الشاملة والأبراج</span>
+            </nav>
+
+            <!-- Responsive AdSense Banner -->
+            <div class="ad-banner" style="background: none; border: none; display: block; width: 100%; height: auto; margin-bottom: 25px;">
+                <ins class="adsbygoogle"
+                     style="display:block"
+                     data-ad-client="ca-pub-6717057078707906"
+                     data-ad-slot="8332346112"
+                     data-ad-format="auto"
+                     data-full-width-responsive="true"></ins>
+                <script>
+                     (adsbygoogle = window.adsbygoogle || []).push({});
+                </script>
+            </div>
+
+            <!-- Age Calculator Tool Panel -->
+            <section class="tool-panel">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        <i class="fa-solid fa-calendar-days"></i>
+                        <div>
+                            <h1>حاسبة العمر الدقيقة بالتفصيل (ميلادي وهجري وموعد عيد الميلاد)</h1>
+                            <p>حساب شامل للسنوات والأشهر والأيام واليوم الذي ولدت فيه وبرجك الفلكي والوقت المتبقي ليوم ميلادك</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel-body">
+                    <div class="input-group">
+                        <label for="ageDateInput"><i class="fa-solid fa-cake-candles"></i> حدد تاريخ ميلادك الكامل (يوم / شهر / سنة):</label>
+                        <input type="date" id="ageDateInput" class="cyber-input" autofocus>
+                    </div>
+
+                    <button class="cyber-btn" onclick="calcComprehensiveAge()">
+                        <i class="fa-solid fa-calculator"></i> احسب عمري بالتفصيل الآن
+                    </button>
+
+                    <!-- Results Area -->
+                    <div id="ageResultsArea" style="display: none; margin-top: 30px;">
+                        <h3 style="margin-bottom: 15px; color: var(--primary); font-size: 1.15rem; display: flex; align-items: center; gap: 8px;">
+                            <i class="fa-solid fa-chart-pie"></i> نتائج التحليل الزمني لعمرك:
+                        </h3>
+
+                        <div class="market-grid">
+                            <div class="price-card" style="border-top: 3px solid var(--primary);">
+                                <h4><span>العمر الميلادي بدقة</span> <i class="fa-solid fa-hourglass-half" style="color: var(--primary);"></i></h4>
+                                <div class="val" id="resYearsDetail">0 سنة</div>
+                                <span class="unit" id="resMonthsDaysDetail">0 شهر و 0 يوم</span>
+                            </div>
+
+                            <div class="price-card" style="border-top: 3px solid var(--gold);">
+                                <h4><span>العمر بالتقويم الهجري (تقريبي)</span> <i class="fa-solid fa-moon" style="color: var(--gold);"></i></h4>
+                                <div class="val" id="resHijri">0 سنة</div>
+                                <span class="unit">سنة هجرية قمرية</span>
+                            </div>
+
+                            <div class="price-card" style="border-top: 3px solid var(--success);">
+                                <h4><span>إجمالي الأيام التي عشتها</span> <i class="fa-solid fa-clock" style="color: var(--success);"></i></h4>
+                                <div class="val" id="resTotalDays">0 يوم</div>
+                                <span class="unit" id="resHoursDetail">0 ساعة</span>
+                            </div>
+
+                            <div class="price-card" style="border-top: 3px solid var(--tiktok);">
+                                <h4><span>المتبقي لعيد ميلادك القادم</span> <i class="fa-solid fa-gift" style="color: var(--tiktok);"></i></h4>
+                                <div class="val" id="resNextBday" style="color: var(--tiktok);">0 يوم</div>
+                                <span class="unit" id="resNextBdayDate">تاريخ عيد ميلادك القادم</span>
+                            </div>
+
+                            <div class="price-card" style="border-top: 3px solid #8b5cf6;">
+                                <h4><span>يوم ولادتك في الأسبوع</span> <i class="fa-solid fa-calendar-week" style="color: #8b5cf6;"></i></h4>
+                                <div class="val" id="resBirthDayOfWeek" style="font-size: 1.5rem; font-family: 'Cairo';">---</div>
+                                <span class="unit">يوم مميز في التاريخ</span>
+                            </div>
+
+                            <div class="price-card" style="border-top: 3px solid #ec4899;">
+                                <h4><span>البرج الفلكي الغربي</span> <i class="fa-solid fa-star" style="color: #ec4899;"></i></h4>
+                                <div class="val" id="resZodiac" style="font-size: 1.5rem; font-family: 'Cairo';">---</div>
+                                <span class="unit" id="resZodiacSymbol">برجك الشمسي</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SEO Content Section -->
+            <section class="seo-box">
+                <h2><i class="fa-solid fa-circle-question"></i> كيف تحسب حاسبة العمر الفرق بين التقويم الميلادي والهجري؟</h2>
+                <p>
+                    يعتمد <strong>التقويم الميلادي (الشمسي)</strong> على دورة الأرض حول الشمس وتستغرق السنة فيه 365 يوماً وربع اليوم، في حين يعتمد <strong>التقويم الهجري (القمري)</strong> على حركة منازل القمر حول الأرض وتستغرق السنة فيه 354 يوماً تقريباً. ينتج عن ذلك فارق 11 يوماً سنوياً بين التقويمين، مما يجعل عمرك بالهجري أكبر من عمرك بالميلادي بنسبة تتراوح بين 3% إلى 3.25%.
+                </p>
+
+                <div class="seo-guide-grid">
+                    <div class="seo-guide-card">
+                        <span class="step-num">1</span>
+                        <h4>حساب العمر بالساعة واليوم</h4>
+                        <p>تقوم الخوارزمية بحساب الميلي ثانية الدقيقة الفاصلة بين لحظة ولادتك والوقت الحالي للحصول على عدد الساعات والأيام بدقة متناهية.</p>
+                    </div>
+                    <div class="seo-guide-card">
+                        <span class="step-num">2</span>
+                        <h4>العد التنازلي لعيد الميلاد</h4>
+                        <p>تحدد الأداة بدقة عدد الأيام المتبقية حتى تاريخ ميلادك القادم لتستعد للاحتفال بيومك الخاص مع الأهل والأصدقاء.</p>
+                    </div>
+                    <div class="seo-guide-card">
+                        <span class="step-num">3</span>
+                        <h4>تحديد البرج الفلكي واليوم</h4>
+                        <p>تتعرف على اليوم الأسبوعي الذي وُلدت فيه (سبت، أحد، إلخ) والبرج الفلكي المطابق ليوم وشهر ميلادك وفقاً لحركة الأبراج الفلكية الـ 12.</p>
+                    </div>
+                </div>
+
+                <h3 style="margin-top: 25px;"><i class="fa-solid fa-circle-question"></i> الأسئلة الشائعة حول حاسبة العمر</h3>
+                <div class="faq-list">
+                    <div class="faq-item">
+                        <div class="faq-question">
+                            <span>هل تأخذ الحاسبة السنوات الكبيسة بعين الاعتبار؟</span>
+                            <i class="fa-solid fa-chevron-down"></i>
+                        </div>
+                        <div class="faq-answer">
+                            نعم، تحسب الخوارزمية السنوات الكبيسة (366 يوماً والتي تتكرر كل 4 سنوات في شهر فبراير) لضمان أعلى دقة حسابية ممكنة في عدد الأيام التراكمي.
+                        </div>
+                    </div>
+                    <div class="faq-item">
+                        <div class="faq-question">
+                            <span>ما هي الأبراج الفلكية الـ 12 وكيف يتم تحديدها؟</span>
+                            <i class="fa-solid fa-chevron-down"></i>
+                        </div>
+                        <div class="faq-answer">
+                            تنقسم الأبراج إلى 12 برجاً (الحمل، الثور، الجوزاء، السرطان، الأسد، العذراء، الميزان، العقرب، القوس، الجدي، الدلو، الحوت)، ويتم تحديد برجك بناءً على موقع الشمس في دائرة البروج يوم ولادتك.
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Related Tools Box -->
+            <div class="related-tools-box">
+                <h3><i class="fa-solid fa-toolbox"></i> أدوات ذات صلة قد تهمك:</h3>
+                <div class="related-pills">
+                    <a href="/bmi" class="related-pill"><i class="fa-solid fa-weight-scale"></i> حاسبة الوزن المثالي وكتلة الجسم</a>
+                    <a href="/discount" class="related-pill"><i class="fa-solid fa-percent"></i> حاسبة الخصم والضريبة</a>
+                    <a href="/password" class="related-pill"><i class="fa-solid fa-shield-halved"></i> مولد كلمات المرور</a>
+                    <a href="/gold" class="related-pill"><i class="fa-solid fa-coins"></i> بورصة الذهب والدولار</a>
+                    <a href="/whatsapp" class="related-pill"><i class="fa-brands fa-whatsapp"></i> صانع رابط واتساب</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Site Footer -->
+        <footer class="site-footer">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <h3>NEXUS ULTRA V5</h3>
+                    <p>المنصة العربية الشاملة للأدوات الذكية والخدمات السحابية المجانية. رادار الأسعار الحية، تحميل الوسائط بجودة فائقة، وأدوات الجيمرز دون الحاجة لأي تسجيل.</p>
+                </div>
+                <div class="footer-col">
+                    <h4>الحاسبات الذكية</h4>
+                    <ul>
+                        <li><a href="/age">حاسبة العمر والتقويم الهجري</a></li>
+                        <li><a href="/bmi">حاسبة مؤشر كتلة الجسم</a></li>
+                        <li><a href="/discount">حاسبة الخصومات وضريبة 15%</a></li>
+                        <li><a href="/whatsapp">صانع رابط واتساب المباشر</a></li>
+                        <li><a href="/password">مولد كلمات المرور المشفرة</a></li>
+                    </ul>
+                </div>
+                <div class="footer-col">
+                    <h4>روابط الأدوات</h4>
+                    <ul>
+                        <li><a href="/gold">بورصة الذهب والدولار</a></li>
+                        <li><a href="/tiktok">محمل فيديو تيك توك</a></li>
+                        <li><a href="/youtube">محمل يوتيوب وغلاف الفيديو</a></li>
+                        <li><a href="/names">زخرفة الأسماء للألعاب</a></li>
+                        <li><a href="/hidden-char">المسافة المخفية ببجي</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <div>&copy; 2026 NEXUS ULTRA V5. جميع الحقوق محفوظة.</div>
+                <div><a href="/" style="color: var(--primary); text-decoration: none;">العودة للرئيسية</a></div>
+            </div>
+        </footer>
+    </main>
+
+    <!-- Cyber Toast -->
+    <div id="cyberToast" class="toast-notification">
+        <i class="fa-solid fa-circle-check" style="color: var(--primary); font-size: 1.4rem;"></i>
+        <div>
+            <strong style="display: block; font-size: 0.95rem;">تمت العملية بنجاح</strong>
+            <span id="toastSubText" style="font-size: 0.8rem; color: var(--text-dim);"></span>
+        </div>
+    </div>
+
+    <!-- Core Scripts -->
+    <script src="/js/main.js"></script>
+    <script>
+        var weekDaysAr = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+
+        function getZodiacSign(day, month) {
+            // month: 1 to 12
+            if ((month == 3 && day >= 21) || (month == 4 && day <= 19)) return { name: 'برج الحمل ♈', symbol: 'ناري (21 مارس - 19 أبريل)' };
+            if ((month == 4 && day >= 20) || (month == 5 && day <= 20)) return { name: 'برج الثور ♉', symbol: 'ترابي (20 أبريل - 20 مايو)' };
+            if ((month == 5 && day >= 21) || (month == 6 && day <= 20)) return { name: 'برج الجوزاء ♊', symbol: 'هوائي (21 مايو - 20 يونيو)' };
+            if ((month == 6 && day >= 21) || (month == 7 && day <= 22)) return { name: 'برج السرطان ♋', symbol: 'مائي (21 يونيو - 22 يوليو)' };
+            if ((month == 7 && day >= 23) || (month == 8 && day <= 22)) return { name: 'برج الأسد ♌', symbol: 'ناري (23 يوليو - 22 أغسطس)' };
+            if ((month == 8 && day >= 23) || (month == 9 && day <= 22)) return { name: 'برج العذراء ♍', symbol: 'ترابي (23 أغسطس - 22 سبتمبر)' };
+            if ((month == 9 && day >= 23) || (month == 10 && day <= 22)) return { name: 'برج الميزان ♎', symbol: 'هوائي (23 سبتمبر - 22 أكتوبر)' };
+            if ((month == 10 && day >= 23) || (month == 11 && day <= 21)) return { name: 'برج العقرب ♏', symbol: 'مائي (23 أكتوبر - 21 نوفمبر)' };
+            if ((month == 11 && day >= 22) || (month == 12 && day <= 21)) return { name: 'برج القوس ♐', symbol: 'ناري (22 نوفمبر - 21 ديسمبر)' };
+            if ((month == 12 && day >= 22) || (month == 1 && day <= 19)) return { name: 'برج الجدي ♑', symbol: 'ترابي (22 ديسمبر - 19 يناير)' };
+            if ((month == 1 && day >= 20) || (month == 2 && day <= 18)) return { name: 'برج الدلو ♒', symbol: 'هوائي (20 يناير - 18 فبراير)' };
+            return { name: 'برج الحوت ♓', symbol: 'مائي (19 فبراير - 20 مارس)' };
+        }
+
+        function calcComprehensiveAge() {
+            var inputVal = document.getElementById('ageDateInput').value;
+            if (!inputVal) {
+                showToast("يرجى تحديد تاريخ ميلادك أولاً!");
+                return;
+            }
+
+            var dob = new Date(inputVal);
+            var now = new Date();
+
+            if (dob > now) {
+                showToast("تاريخ الميلاد لا يمكن أن يكون في المستقبل!");
+                return;
+            }
+
+            // Exact Years, Months, Days
+            var years = now.getFullYear() - dob.getFullYear();
+            var months = now.getMonth() - dob.getMonth();
+            var days = now.getDate() - dob.getDate();
+
+            if (days < 0) {
+                months--;
+                var prevMonthLastDay = new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+                days += prevMonthLastDay;
+            }
+            if (months < 0) {
+                years--;
+                months += 12;
+            }
+
+            // Total Days & Hours
+            var diffMs = now - dob;
+            var totalDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+            var totalHours = totalDays * 24;
+
+            // Hijri approx: 1 solar year ≈ 1.0307 hijri year
+            var hijriYears = Math.floor(years * 1.0307);
+
+            // Next Birthday Countdown
+            var nextBday = new Date(now.getFullYear(), dob.getMonth(), dob.getDate());
+            if (now > nextBday) {
+                nextBday.setFullYear(now.getFullYear() + 1);
+            }
+            var daysToNextBday = Math.ceil((nextBday - now) / (1000 * 60 * 60 * 24));
+
+            // Day of Week
+            var birthDayName = weekDaysAr[dob.getDay()] || 'يوم الميلاد';
+
+            // Zodiac
+            var zodiac = getZodiacSign(dob.getDate(), dob.getMonth() + 1);
+
+            // Update UI
+            document.getElementById('resYearsDetail').innerText = years + " سنة";
+            document.getElementById('resMonthsDaysDetail').innerText = months + " شهر و " + days + " يوم";
+            document.getElementById('resHijri').innerText = hijriYears + " سنة";
+            document.getElementById('resTotalDays').innerText = totalDays.toLocaleString() + " يوم";
+            document.getElementById('resHoursDetail').innerText = "أكثر من " + totalHours.toLocaleString() + " ساعة";
+
+            if (daysToNextBday === 0 || daysToNextBday === 365) {
+                document.getElementById('resNextBday').innerText = "اليوم! 🎂";
+                document.getElementById('resNextBdayDate').innerText = "عيد ميلاد سعيد لك اليوم!";
+            } else {
+                document.getElementById('resNextBday').innerText = daysToNextBday + " يوم";
+                document.getElementById('resNextBdayDate').innerText = "يصادف تاريخ: " + nextBday.toLocaleDateString('ar-EG');
+            }
+
+            document.getElementById('resBirthDayOfWeek').innerText = birthDayName;
+            document.getElementById('resZodiac').innerText = zodiac.name;
+            document.getElementById('resZodiacSymbol').innerText = zodiac.symbol;
+
+            document.getElementById('ageResultsArea').style.display = 'block';
+            showToast("تم حساب عمرك بالتفصيل بنجاح!");
+        }
+
+        // Set default date picker to an example like 2000-01-01
+        window.addEventListener('load', function() {
+            var datePicker = document.getElementById('ageDateInput');
+            if (datePicker && !datePicker.value) {
+                datePicker.value = '2000-01-01';
+            }
+        });
+    </script>
+</body>
+</html>

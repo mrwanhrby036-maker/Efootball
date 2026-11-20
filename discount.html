@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>حاسبة الخصم والنسبة المئوية وضريبة القيمة المضافة (15%) السريعة | NEXUS</title>
+    <meta name="description" content="احسب السعر بعد الخصم ومقدار التوفير الصافي وضريبة القيمة المضافة (15% VAT) بكل سهولة ودقة. الأداة المثالية لحساب عروض التسوق وتخفيضات المتاجر والفواتير.">
+    <meta name="keywords" content="حاسبة الخصم, حساب نسبة الخصم, حاسبة الضريبة 15, حساب السعر بعد الخصم, حاسبة ضريبة القيمة المضافة, discount calculator, كيف احسب الخصم">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://efootball-drab.vercel.app/discount">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://efootball-drab.vercel.app/discount">
+    <meta property="og:title" content="حاسبة الخصومات وضريبة القيمة المضافة | NEXUS ULTRA">
+    <meta property="og:description" content="احسب السعر النهائي ومقدار التوفير والضريبة 15% في ثوانٍ معدودة.">
+    <meta property="og:image" content="https://efootball-drab.vercel.app/favicon.ico">
+    <meta property="og:site_name" content="NEXUS ULTRA">
+    <meta property="og:locale" content="ar_AR">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="حاسبة الخصم والضريبة | NEXUS">
+    <meta name="twitter:description" content="حساب دقيق لخصومات المتاجر والضريبة المضافة.">
+
+    <!-- Verification & Ads -->
+    <meta name="google-site-verification" content="oFipA5OVdHadbanYm0b6JZR6tzlR4H_qsi6xTAYBLWM" />
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6717057078707906" crossorigin="anonymous"></script>
+
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%2305070a'/%3E%3Ctext x='50' y='68' font-size='60' text-anchor='middle' fill='%23f59e0b'%3E%25%3C/text%3E%3C/svg%3E">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=Orbitron:wght@600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+
+    <!-- Structured Data (JSON-LD) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebApplication",
+          "name": "حاسبة الخصومات وضريبة القيمة المضافة",
+          "url": "https://efootball-drab.vercel.app/discount",
+          "description": "أداة مالية لحساب السعر الصافي بعد الخصم وقيمة التوفير ومبلغ ضريبة القيمة المضافة (15%).",
+          "applicationCategory": "FinanceApplication",
+          "operatingSystem": "All",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          }
+        },
+        {
+          "@type": "FAQPage",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "كيف أحسب السعر بعد الخصم يدوياً؟",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "لحساب السعر بعد الخصم: اضرب السعر الأصلي في نسبة الخصم واقسم على 100 لمعرفة قيمة التوفير، ثم اطرح قيمة التوفير من السعر الأصلي. مثال: سلعة بـ 200 وعليها خصم 20%، قيمة الخصم = 200 × 0.20 = 40، والسعر بعد الخصم = 200 - 40 = 160."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "كيف يتم حساب ضريبة القيمة المضافة 15%؟",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "لحساب الضريبة بنسبة 15% (المعتمدة في السعودية)، اضرب السعر بعد الخصم في 0.15، ثم أضف الناتج للسعر لتحصل على الإجمالي النهائي شامل الضريبة."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "هل يمكن تغيير نسبة الضريبة لدول أخرى؟",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "نعم، يمكنك تعديل خانة نسبة الضريبة بكل حرية لاختيار أي نسبة تطبقها دولتك، مثل 5% في الإمارات أو 14% في مصر."
+              }
+            }
+          ]
+        },
+        {
+          "@type": "BreadcrumbList",
+          "itemListElement": [
+            {
+              "@type": "ListItem",
+              "position": 1,
+              "name": "الرئيسية",
+              "item": "https://efootball-drab.vercel.app/"
+            },
+            {
+              "@type": "ListItem",
+              "position": 2,
+              "name": "حاسبة الخصم والضريبة",
+              "item": "https://efootball-drab.vercel.app/discount"
+            }
+          ]
+        }
+      ]
+    }
+    </script>
+</head>
+<body>
+
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+        <div class="brand">
+            <a href="/">
+                <i class="fa-solid fa-layer-group"></i>
+                <div class="brand-text">
+                    <span class="brand-title">NEXUS ULTRA</span>
+                    <span><i class="fa-solid fa-circle" style="font-size: 0.5rem;"></i> متصل بالسيرفرات العالمية</span>
+                </div>
+            </a>
+        </div>
+
+        <div class="nav-menu">
+            <div class="nav-category">الرئيسية</div>
+            <a class="nav-item" href="/">
+                <i class="fa-solid fa-house"></i>
+                <span>جميع الأدوات</span>
+            </a>
+
+            <div class="nav-category">التريند والأسعار المباشرة</div>
+            <a class="nav-item" href="/gold">
+                <i class="fa-solid fa-coins" style="color: var(--gold);"></i>
+                <span>بورصة الذهب والدولار</span>
+                <span class="badge-live">مباشر</span>
+            </a>
+            <a class="nav-item" href="/tiktok">
+                <i class="fa-brands fa-tiktok" style="color: var(--tiktok);"></i>
+                <span>تحميل فيديو تيك توك</span>
+                <span class="badge-live">نشط</span>
+            </a>
+            <a class="nav-item" href="/youtube">
+                <i class="fa-brands fa-youtube" style="color: #ff0000;"></i>
+                <span>تحميل يوتيوب وصور مصغرة</span>
+                <span class="badge-live">جديد</span>
+            </a>
+
+            <div class="nav-category">أدوات الجيمرز والسوشيال</div>
+            <a class="nav-item" href="/names">
+                <i class="fa-solid fa-wand-magic-sparkles"></i>
+                <span>محرك الزخرفة (275+)</span>
+            </a>
+            <a class="nav-item" href="/hidden-char">
+                <i class="fa-solid fa-ghost"></i>
+                <span>المسافة المخفية للألعاب</span>
+            </a>
+            <a class="nav-item" href="/whatsapp">
+                <i class="fa-brands fa-whatsapp"></i>
+                <span>صانع رابط واتساب</span>
+            </a>
+            <a class="nav-item" href="/password">
+                <i class="fa-solid fa-shield-halved"></i>
+                <span>مولد كلمات المرور</span>
+            </a>
+
+            <div class="nav-category">الحاسبات الذكية</div>
+            <a class="nav-item" href="/age">
+                <i class="fa-solid fa-calendar-days"></i>
+                <span>حاسبة العمر الشاملة</span>
+            </a>
+            <a class="nav-item" href="/bmi">
+                <i class="fa-solid fa-weight-scale"></i>
+                <span>حاسبة الوزن المثالي</span>
+            </a>
+            <a class="nav-item active" href="/discount">
+                <i class="fa-solid fa-percent"></i>
+                <span>حاسبة الخصم والضريبة</span>
+            </a>
+        </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+        <!-- Top Live Ticker & Header -->
+        <header class="top-header">
+            <div class="live-ticker">
+                <div class="ticker-item">
+                    <i class="fa-solid fa-globe"></i>
+                    <span>أوقية الذهب: <span id="topGoldOunce" class="ticker-val">2,685.5$</span></span>
+                </div>
+                <div class="ticker-item">
+                    <i class="fa-solid fa-dollar-sign" style="color: var(--success);"></i>
+                    <span>مصر: <span id="topUsdEgp" class="ticker-val">49.60 ج.م</span></span>
+                </div>
+                <div class="ticker-item">
+                    <i class="fa-solid fa-dollar-sign" style="color: var(--success);"></i>
+                    <span>السعودية: <span id="topUsdSar" class="ticker-val">3.75 ر.س</span></span>
+                </div>
+            </div>
+            <div class="top-nav-bar">
+                <a href="/" class="top-nav-link"><i class="fa-solid fa-house"></i> الرئيسية</a>
+                <span style="font-size: 0.8rem; color: var(--text-dim); display: flex; align-items: center; gap: 6px;">
+                    <i class="fa-solid fa-percent" style="color: var(--gold);"></i> حساب مالي فوري
+                </span>
+            </div>
+        </header>
+
+        <div class="workspace">
+            <!-- Breadcrumb Navigation -->
+            <nav class="breadcrumb" aria-label="مسار التنقل">
+                <a href="/"><i class="fa-solid fa-house"></i> الرئيسية</a>
+                <i class="fa-solid fa-chevron-left sep"></i>
+                <span class="current">حاسبة الخصم والضريبة</span>
+            </nav>
+
+            <!-- Responsive AdSense Banner -->
+            <div class="ad-banner" style="background: none; border: none; display: block; width: 100%; height: auto; margin-bottom: 25px;">
+                <ins class="adsbygoogle"
+                     style="display:block"
+                     data-ad-client="ca-pub-6717057078707906"
+                     data-ad-slot="8332346112"
+                     data-ad-format="auto"
+                     data-full-width-responsive="true"></ins>
+                <script>
+                     (adsbygoogle = window.adsbygoogle || []).push({});
+                </script>
+            </div>
+
+            <!-- Discount Tool Panel -->
+            <section class="tool-panel">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        <i class="fa-solid fa-percent" style="color: var(--gold); border-color: rgba(245, 158, 11, 0.3); background: rgba(245, 158, 11, 0.1);"></i>
+                        <div>
+                            <h1>حاسبة نسبة الخصومات وضريبة القيمة المضافة وسعر التوفير</h1>
+                            <p>حساب السعر الصافي بعد الخصم وقيمة التوفير وإضافة ضريبة القيمة المضافة (VAT) بدقة</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel-body">
+                    <div class="grid-2col">
+                        <div class="input-group">
+                            <label for="finPrice"><i class="fa-solid fa-money-bill-wave"></i> السعر الأصلي للسلعة أو الخدمة:</label>
+                            <input type="number" id="finPrice" class="cyber-input" placeholder="مثال: 1000" value="1000" min="0" step="any" oninput="calcFinance()" autofocus>
+                        </div>
+                        <div class="input-group">
+                            <label for="finDisc"><i class="fa-solid fa-tag"></i> نسبة الخصم المئوية (%):</label>
+                            <input type="number" id="finDisc" class="cyber-input" placeholder="مثال: 20" value="20" min="0" max="100" step="any" oninput="calcFinance()">
+                        </div>
+                    </div>
+
+                    <!-- Quick discount chips -->
+                    <div style="display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; align-items: center;">
+                        <span style="font-size: 0.85rem; color: var(--text-dim);"><i class="fa-solid fa-bolt"></i> نسب شائعة:</span>
+                        <button class="cyber-btn" style="width: auto; padding: 5px 12px; font-size: 0.8rem; background: var(--bg-card); color: var(--text-light); border: 1px solid var(--border-color);" onclick="setDiscount(10)">10%</button>
+                        <button class="cyber-btn" style="width: auto; padding: 5px 12px; font-size: 0.8rem; background: var(--bg-card); color: var(--text-light); border: 1px solid var(--border-color);" onclick="setDiscount(20)">20%</button>
+                        <button class="cyber-btn" style="width: auto; padding: 5px 12px; font-size: 0.8rem; background: var(--bg-card); color: var(--text-light); border: 1px solid var(--border-color);" onclick="setDiscount(25)">25%</button>
+                        <button class="cyber-btn" style="width: auto; padding: 5px 12px; font-size: 0.8rem; background: var(--bg-card); color: var(--text-light); border: 1px solid var(--border-color);" onclick="setDiscount(30)">30%</button>
+                        <button class="cyber-btn" style="width: auto; padding: 5px 12px; font-size: 0.8rem; background: var(--bg-card); color: var(--text-light); border: 1px solid var(--border-color);" onclick="setDiscount(50)">50% (نصف السعر)</button>
+                        <button class="cyber-btn" style="width: auto; padding: 5px 12px; font-size: 0.8rem; background: var(--bg-card); color: var(--text-light); border: 1px solid var(--border-color);" onclick="setDiscount(70)">70%</button>
+                    </div>
+
+                    <div class="input-group">
+                        <label for="finVatRate"><i class="fa-solid fa-receipt"></i> نسبة ضريبة القيمة المضافة VAT (15% القياسية بالسعودية، أو غيرها):</label>
+                        <input type="number" id="finVatRate" class="cyber-input" placeholder="15" value="15" min="0" max="100" step="any" oninput="calcFinance()">
+                    </div>
+
+                    <button class="cyber-btn btn-gold" onclick="calcFinance()">
+                        <i class="fa-solid fa-coins"></i> حساب تكلفة الفاتورة والتوفير
+                    </button>
+
+                    <!-- Results Area -->
+                    <div id="finResults" style="display: block; margin-top: 30px;">
+                        <h3 style="margin-bottom: 15px; color: var(--gold); font-size: 1.15rem; display: flex; align-items: center; gap: 8px;">
+                            <i class="fa-solid fa-file-invoice-dollar"></i> تفاصيل الحساب المالي:
+                        </h3>
+
+                        <div class="market-grid">
+                            <div class="price-card" style="border-top: 3px solid var(--primary);">
+                                <h4><span>السعر الصافي بعد الخصم</span> <i class="fa-solid fa-tag" style="color: var(--primary);"></i></h4>
+                                <div class="val" id="finFinal">800.00</div>
+                                <span class="unit">قبل إضافة الضريبة</span>
+                            </div>
+
+                            <div class="price-card" style="border-top: 3px solid var(--success);">
+                                <h4><span>إجمالي قيمة التوفير</span> <i class="fa-solid fa-piggy-bank" style="color: var(--success);"></i></h4>
+                                <div class="val" id="finSaved" style="color: var(--success);">200.00</div>
+                                <span class="unit" id="finSavedPercent">وفرت 20% من السعر</span>
+                            </div>
+
+                            <div class="price-card" style="border-top: 3px solid var(--gold);">
+                                <h4><span>قيمة الضريبة المضافة (VAT)</span> <i class="fa-solid fa-scale-balanced" style="color: var(--gold);"></i></h4>
+                                <div class="val" id="finVatAmount">120.00</div>
+                                <span class="unit" id="finVatLabel">بنسبة 15%</span>
+                            </div>
+
+                            <div class="price-card" style="border-top: 3px solid var(--tiktok);">
+                                <h4><span>السعر الإجمالي النهائي</span> <i class="fa-solid fa-cash-register" style="color: var(--tiktok);"></i></h4>
+                                <div class="val" id="finVat15" style="color: var(--primary);">920.00</div>
+                                <span class="unit">شامل الخصم + الضريبة</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SEO Content Section -->
+            <section class="seo-box">
+                <h2><i class="fa-solid fa-calculator"></i> الدليل الشامل لحساب الخصومات والتخفيضات في مواسم التسوق</h2>
+                <p>
+                    خلال مواسم العروض الكبرى مثل <strong>الجمعة البيضاء (White Friday)</strong> وعروض اليوم الوطني ونهاية العام، تقدم المتاجر والمواقع الإلكترونية خصومات مغرية بنسب مختلفة. تساعدك <strong>حاسبة NEXUS ULTRA</strong> على معرفة القيمة الحقيقية للخصم، والمبلغ الذي ستوفره بدقة، والسعر الإجمالي الذي ستدفعه عند الكاشير أو بوابة الدفع الإلكتروني بعد إضافة ضريبة القيمة المضافة (15% VAT).
+                </p>
+
+                <div class="seo-guide-grid">
+                    <div class="seo-guide-card">
+                        <span class="step-num">1</span>
+                        <h4>أدخل السعر الأساسي</h4>
+                        <p>اكتب السعر الأصلي المعروض على بطاقة السلعة قبل تطبيق أي كود خصم أو تخفيضات ترويجية.</p>
+                    </div>
+                    <div class="seo-guide-card">
+                        <span class="step-num">2</span>
+                        <h4>حدد نسبة الخصم المئوية</h4>
+                        <p>اختر نسبة الخصم المعلنة (مثلاً 20% أو 50%) أو استخدم الأزرار السريعة للنسب الشائعة بنقرة واحدة.</p>
+                    </div>
+                    <div class="seo-guide-card">
+                        <span class="step-num">3</span>
+                        <h4>احسب الضريبة بدقة</h4>
+                        <p>تقوم الأداة بحساب الضريبة على السعر الفعلي بعد الخصم (وليس السعر الأصلي)، وهو الإجراء القانوني والمحاسبي الصحيح للفواتير الضريبية.</p>
+                    </div>
+                </div>
+
+                <h3 style="margin-top: 25px;"><i class="fa-solid fa-circle-question"></i> الأسئلة الشائعة حول الخصم والضريبة</h3>
+                <div class="faq-list">
+                    <div class="faq-item">
+                        <div class="faq-question">
+                            <span>هل تُحسب الضريبة قبل الخصم أم بعد الخصم؟</span>
+                            <i class="fa-solid fa-chevron-down"></i>
+                        </div>
+                        <div class="faq-answer">
+                            وفقاً للوائح هيئة الزكاة والضريبة والجمارك (ZATCA) في السعودية ومعظم الهيئات الضريبية، تُفرض ضريبة القيمة المضافة على القيمة الفعلية المدفوعة (السعر بعد خصم التاجر).
+                        </div>
+                    </div>
+                    <div class="faq-item">
+                        <div class="faq-question">
+                            <span>كيف أحسب خصمين متتاليين (مثلاً 20% ثم 10% إضافية)؟</span>
+                            <i class="fa-solid fa-chevron-down"></i>
+                        </div>
+                        <div class="faq-answer">
+                            الخصومات المتتالية لا تُجمع (أي لا تساوي 30%). يتم أولاً تطبيق خصم 20% على السعر الأصلي، ثم يُطبق خصم 10% على السعر الجديد الناتج. في أداتنا يمكنك حساب الناتج الأول ثم إدخال السعر المخفض لتطبيق الكود الإضافي.
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Related Tools Box -->
+            <div class="related-tools-box">
+                <h3><i class="fa-solid fa-toolbox"></i> أدوات ذات صلة قد تهمك:</h3>
+                <div class="related-pills">
+                    <a href="/gold" class="related-pill"><i class="fa-solid fa-coins"></i> بورصة الذهب والدولار</a>
+                    <a href="/bmi" class="related-pill"><i class="fa-solid fa-weight-scale"></i> حاسبة الوزن المثالي</a>
+                    <a href="/age" class="related-pill"><i class="fa-solid fa-calendar-days"></i> حاسبة العمر الشاملة</a>
+                    <a href="/whatsapp" class="related-pill"><i class="fa-brands fa-whatsapp"></i> صانع رابط واتساب</a>
+                    <a href="/password" class="related-pill"><i class="fa-solid fa-shield-halved"></i> مولد كلمات المرور</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Site Footer -->
+        <footer class="site-footer">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <h3>NEXUS ULTRA V5</h3>
+                    <p>المنصة العربية الشاملة للأدوات الذكية والخدمات السحابية المجانية. رادار الأسعار الحية، تحميل الوسائط بجودة فائقة، وأدوات الجيمرز دون الحاجة لأي تسجيل.</p>
+                </div>
+                <div class="footer-col">
+                    <h4>الحاسبات الذكية</h4>
+                    <ul>
+                        <li><a href="/discount">حاسبة الخصومات وضريبة 15%</a></li>
+                        <li><a href="/bmi">حاسبة مؤشر كتلة الجسم</a></li>
+                        <li><a href="/age">حاسبة العمر والتقويم الهجري</a></li>
+                        <li><a href="/whatsapp">صانع رابط واتساب المباشر</a></li>
+                        <li><a href="/password">مولد كلمات المرور المشفرة</a></li>
+                    </ul>
+                </div>
+                <div class="footer-col">
+                    <h4>روابط الأدوات</h4>
+                    <ul>
+                        <li><a href="/gold">بورصة الذهب والدولار</a></li>
+                        <li><a href="/tiktok">محمل فيديو تيك توك</a></li>
+                        <li><a href="/youtube">محمل يوتيوب وغلاف الفيديو</a></li>
+                        <li><a href="/names">زخرفة الأسماء للألعاب</a></li>
+                        <li><a href="/hidden-char">المسافة المخفية ببجي</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <div>&copy; 2026 NEXUS ULTRA V5. جميع الحقوق محفوظة.</div>
+                <div><a href="/" style="color: var(--primary); text-decoration: none;">العودة للرئيسية</a></div>
+            </div>
+        </footer>
+    </main>
+
+    <!-- Cyber Toast -->
+    <div id="cyberToast" class="toast-notification">
+        <i class="fa-solid fa-circle-check" style="color: var(--primary); font-size: 1.4rem;"></i>
+        <div>
+            <strong style="display: block; font-size: 0.95rem;">تمت العملية بنجاح</strong>
+            <span id="toastSubText" style="font-size: 0.8rem; color: var(--text-dim);"></span>
+        </div>
+    </div>
+
+    <!-- Core Scripts -->
+    <script src="/js/main.js"></script>
+    <script>
+        function setDiscount(pct) {
+            document.getElementById('finDisc').value = pct;
+            calcFinance();
+            showToast("تم تطبيق نسبة خصم " + pct + "%");
+        }
+
+        function calcFinance() {
+            var priceInput = document.getElementById('finPrice');
+            var discInput = document.getElementById('finDisc');
+            var vatInput = document.getElementById('finVatRate');
+
+            var p = parseFloat(priceInput ? priceInput.value : 0);
+            var d = parseFloat(discInput ? discInput.value : 0) || 0;
+            var vatRate = parseFloat(vatInput ? vatInput.value : 15) || 0;
+
+            if (isNaN(p) || p < 0) p = 0;
+            if (isNaN(d) || d < 0) d = 0;
+            if (d > 100) d = 100;
+            if (isNaN(vatRate) || vatRate < 0) vatRate = 0;
+
+            var saved = p * (d / 100);
+            var afterDisc = p - saved;
+            var vatAmount = afterDisc * (vatRate / 100);
+            var totalWithVat = afterDisc + vatAmount;
+
+            document.getElementById('finFinal').innerText = afterDisc.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            document.getElementById('finSaved').innerText = saved.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            document.getElementById('finSavedPercent').innerText = "وفرت " + d + "% (" + saved.toFixed(2) + ") من السعر الأصلي";
+            document.getElementById('finVatAmount').innerText = vatAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            document.getElementById('finVatLabel').innerText = "بنسبة ضريبة " + vatRate + "%";
+            document.getElementById('finVat15').innerText = totalWithVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+            document.getElementById('finResults').style.display = 'block';
+        }
+
+        window.addEventListener('load', function() {
+            calcFinance();
+        });
+    </script>
+</body>
+</html>
