@@ -798,6 +798,54 @@ select.cyber-select {
     margin-bottom: 35px;
     position: relative;
     overflow: hidden;
+    isolation: isolate;
+}
+
+.hero-video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: -2;
+    pointer-events: none;
+}
+
+.hero-section::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: linear-gradient(180deg, rgba(11, 15, 23, 0.5) 0%, rgba(11, 15, 23, 0.72) 65%, var(--bg-dark) 100%);
+}
+
+.hero-motion-toggle {
+    display: block;
+    margin: 18px 0 0;
+    padding: 7px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: rgba(11, 15, 23, 0.85);
+    color: var(--text-light);
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.hero-motion-toggle[hidden] {
+    display: none;
+}
+
+.hero-motion-toggle:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .hero-video {
+        visibility: hidden;
+    }
 }
 
 .hero-badge {
@@ -1685,6 +1733,9 @@ select.cyber-select {
 
             <!-- Hero Section -->
             <section class="hero-section">
+                <video class="hero-video" id="heroVideo" autoplay muted loop playsinline preload="metadata" aria-hidden="true" tabindex="-1">
+                    <source src="/assets/videos/neural-plexus-seamless-loop.mp4" type="video/mp4" media="(prefers-reduced-motion: no-preference)">
+                </video>
                 <div class="hero-badge">
                     <i class="fa-solid fa-bolt"></i>
                     <span>NEXUS ULTRA V5 | منصة الأدوات السحابية المتقدمة</span>
@@ -1720,6 +1771,7 @@ select.cyber-select {
                         <span>متوافق تماماً مع الجوال</span>
                     </div>
                 </div>
+                <button class="hero-motion-toggle" id="heroMotionToggle" type="button" aria-controls="heroVideo" hidden>إيقاف حركة الخلفية</button>
             </section>
 
             <!-- Tools Section Heading -->
@@ -2392,6 +2444,57 @@ function initCustomCyberSelects() {
 // Global DOM Initialization
 // ─────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function() {
+    // Keep decorative motion limited to the visible hero and respect accessibility preferences.
+    var heroVideo = document.getElementById('heroVideo');
+    var motionToggle = document.getElementById('heroMotionToggle');
+    if (heroVideo && motionToggle) {
+        var reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+        var userPaused = false;
+        var videoUnavailable = false;
+        var heroVisible = true;
+        heroVideo.muted = true;
+
+        function syncHeroPlayback() {
+            motionToggle.hidden = reducedMotion.matches || videoUnavailable || !!heroVideo.error;
+            if (reducedMotion.matches || videoUnavailable || userPaused || !heroVisible || document.hidden) {
+                heroVideo.pause();
+                return;
+            }
+            var playRequest = heroVideo.play();
+            if (playRequest) playRequest.catch(function() {
+                // Autoplay may be blocked; leave the static dark background usable.
+            });
+        }
+
+        heroVideo.addEventListener('play', function() {
+            motionToggle.textContent = 'إيقاف حركة الخلفية';
+        });
+        heroVideo.addEventListener('pause', function() {
+            motionToggle.textContent = 'تشغيل حركة الخلفية';
+        });
+        function handleVideoError() {
+            videoUnavailable = true;
+            heroVideo.pause();
+            motionToggle.hidden = true;
+        }
+        heroVideo.addEventListener('error', handleVideoError);
+        // Source errors do not bubble to the video element.
+        heroVideo.querySelector('source').addEventListener('error', handleVideoError);
+        motionToggle.addEventListener('click', function() {
+            userPaused = !heroVideo.paused;
+            syncHeroPlayback();
+        });
+        reducedMotion.addEventListener('change', syncHeroPlayback);
+        document.addEventListener('visibilitychange', syncHeroPlayback);
+        if ('IntersectionObserver' in window) {
+            new IntersectionObserver(function(entries) {
+                heroVisible = entries[0].isIntersecting;
+                syncHeroPlayback();
+            }).observe(heroVideo.closest('.hero-section'));
+        }
+        syncHeroPlayback();
+    }
+
     // Populate ticker with instant fallback to avoid delay or NaN
     updateTopTicker();
 
