@@ -1,6 +1,6 @@
 /**
  * NEXUS ULTRA V5 - Global Core JavaScript
- * Handles live ticker data, currency conversion, toast notifications,
+ * Handles live market ticker, custom cyberpunk dropdowns, toast notifications,
  * FAQ accordions, and common utilities.
  */
 
@@ -113,7 +113,7 @@ function isSafeHttpUrl(value) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Live Ticker Update (Instantly populates with fallback, then updates from API)
+// Live Ticker Update (Instantly populates with fallback, then updates from live stream)
 // ─────────────────────────────────────────────────────────────
 function updateTopTicker() {
     var topOunce = document.getElementById('topGoldOunce');
@@ -136,7 +136,7 @@ function updateTopTicker() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Fetch Market Data from APIs (With Graceful Fallbacks)
+// Fetch Market Data (With Graceful Fallbacks)
 // ─────────────────────────────────────────────────────────────
 async function fetchLiveMarketData() {
     var currencyUpdated = false;
@@ -162,7 +162,7 @@ async function fetchLiveMarketData() {
             }
         }
     } catch (e) {
-        console.warn('Currency API unreachable, using realistic fallback rates:', e);
+        // Fallback active
     }
 
     // 2. Fetch Gold Price (PAXGUSDT token represents 1 fine troy ounce of gold)
@@ -179,7 +179,7 @@ async function fetchLiveMarketData() {
             }
         }
     } catch (e) {
-        console.warn('Gold API unreachable, using realistic fallback price:', e);
+        // Fallback active
     }
 
     isLiveDataLoaded = currencyUpdated || goldUpdated;
@@ -194,14 +194,190 @@ async function fetchLiveMarketData() {
 }
 
 // ─────────────────────────────────────────────────────────────
+// CUSTOM CYBER DROPDOWN COMPONENT
+// Replaces boring default browser / OS popups with stunning dark neon dropdowns
+// ─────────────────────────────────────────────────────────────
+function initCustomCyberSelects() {
+    var selects = document.querySelectorAll('select.cyber-select');
+    selects.forEach(function(select) {
+        if (select.dataset.customized === 'true') return;
+        select.dataset.customized = 'true';
+
+        // Hide native select
+        select.style.display = 'none';
+
+        // Create dropdown container
+        var container = document.createElement('div');
+        container.className = 'cyber-dropdown';
+        select.parentNode.insertBefore(container, select);
+        container.appendChild(select);
+
+        // Create trigger button
+        var trigger = document.createElement('div');
+        trigger.className = 'cyber-dropdown-trigger';
+        trigger.setAttribute('tabindex', '0');
+
+        var triggerText = document.createElement('span');
+        triggerText.className = 'trigger-text';
+
+        var arrow = document.createElement('i');
+        arrow.className = 'fa-solid fa-chevron-down arrow-icon';
+
+        trigger.appendChild(triggerText);
+        trigger.appendChild(arrow);
+        container.appendChild(trigger);
+
+        // Create menu
+        var menu = document.createElement('div');
+        menu.className = 'cyber-dropdown-menu';
+
+        // If more than 5 options, add live search filter
+        var hasSearch = select.options.length > 5;
+        var searchInput = null;
+        if (hasSearch) {
+            var searchBox = document.createElement('div');
+            searchBox.className = 'cyber-dropdown-search';
+            searchInput = document.createElement('input');
+            searchInput.type = 'text';
+            searchInput.placeholder = '🔍 ابحث في القائمة...';
+            searchBox.appendChild(searchInput);
+            menu.appendChild(searchBox);
+
+            searchInput.addEventListener('input', function(e) {
+                var q = e.target.value.toLowerCase().trim();
+                var items = listContainer.querySelectorAll('.cyber-dropdown-item');
+                items.forEach(function(item) {
+                    var text = item.innerText.toLowerCase();
+                    item.style.display = (text.indexOf(q) !== -1) ? 'flex' : 'none';
+                });
+            });
+
+            searchBox.addEventListener('click', function(e) {
+                e.stopPropagation();
+            });
+        }
+
+        // List container
+        var listContainer = document.createElement('div');
+        listContainer.className = 'cyber-dropdown-list';
+
+        function updateTriggerText() {
+            var selectedOpt = select.options[select.selectedIndex];
+            if (selectedOpt) {
+                triggerText.innerText = selectedOpt.text;
+            }
+        }
+
+        // Populate items
+        for (var i = 0; i < select.options.length; i++) {
+            (function(opt, index) {
+                var item = document.createElement('div');
+                item.className = 'cyber-dropdown-item' + (index === select.selectedIndex ? ' selected' : '');
+
+                var label = document.createElement('span');
+                label.textContent = opt.text;
+
+                var check = document.createElement('i');
+                check.className = 'fa-solid fa-check check-icon';
+                check.style.display = (index === select.selectedIndex) ? 'inline-block' : 'none';
+
+                item.appendChild(label);
+                item.appendChild(check);
+
+                item.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    select.selectedIndex = index;
+
+                    // Trigger native change event so all tool scripts update instantly
+                    var evt = new Event('change', { bubbles: true });
+                    select.dispatchEvent(evt);
+
+                    updateTriggerText();
+
+                    // Update selected visual state
+                    var allItems = listContainer.querySelectorAll('.cyber-dropdown-item');
+                    allItems.forEach(function(it) {
+                        it.classList.remove('selected');
+                        var icon = it.querySelector('.check-icon');
+                        if (icon) icon.style.display = 'none';
+                    });
+                    item.classList.add('selected');
+                    check.style.display = 'inline-block';
+
+                    container.classList.remove('open');
+                });
+
+                listContainer.appendChild(item);
+            })(select.options[i], i);
+        }
+
+        menu.appendChild(listContainer);
+        container.appendChild(menu);
+
+        updateTriggerText();
+
+        // Listen for programmatical select changes
+        select.addEventListener('change', function() {
+            updateTriggerText();
+            var allItems = listContainer.querySelectorAll('.cyber-dropdown-item');
+            allItems.forEach(function(it, idx) {
+                var icon = it.querySelector('.check-icon');
+                if (idx === select.selectedIndex) {
+                    it.classList.add('selected');
+                    if (icon) icon.style.display = 'inline-block';
+                } else {
+                    it.classList.remove('selected');
+                    if (icon) icon.style.display = 'none';
+                }
+            });
+        });
+
+        // Toggle open/close
+        trigger.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var isOpen = container.classList.contains('open');
+            document.querySelectorAll('.cyber-dropdown.open').forEach(function(d) {
+                if (d !== container) d.classList.remove('open');
+            });
+            container.classList.toggle('open');
+            if (!isOpen && searchInput) {
+                searchInput.value = '';
+                var items = listContainer.querySelectorAll('.cyber-dropdown-item');
+                items.forEach(function(item) { item.style.display = 'flex'; });
+                setTimeout(function() { searchInput.focus(); }, 100);
+            }
+        });
+    });
+
+    // Close on click outside
+    document.addEventListener('click', function() {
+        document.querySelectorAll('.cyber-dropdown.open').forEach(function(d) {
+            d.classList.remove('open');
+        });
+    });
+
+    // Close on Escape key
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            document.querySelectorAll('.cyber-dropdown.open').forEach(function(d) {
+                d.classList.remove('open');
+            });
+        }
+    });
+}
+
+// ─────────────────────────────────────────────────────────────
 // Global DOM Initialization
 // ─────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function() {
     // Populate ticker with instant fallback to avoid delay or NaN
     updateTopTicker();
 
-    // Fetch live data asynchronously
+    // Fetch live market data asynchronously
     fetchLiveMarketData();
+
+    // Transform all selects into Custom Cyber Dropdowns
+    initCustomCyberSelects();
 
     // Setup FAQ Accordion listeners
     var faqQuestions = document.querySelectorAll('.faq-question');
