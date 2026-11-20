@@ -820,6 +820,41 @@ select.cyber-select {
     background: linear-gradient(180deg, rgba(11, 15, 23, 0.5) 0%, rgba(11, 15, 23, 0.72) 65%, var(--bg-dark) 100%);
 }
 
+.hero-ripples {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    overflow: hidden;
+    border-radius: inherit;
+    pointer-events: none;
+    direction: ltr;
+}
+
+.hero-ripple {
+    position: absolute;
+    width: 220px;
+    height: 220px;
+    margin: -110px 0 0 -110px;
+    border: 1px solid rgba(0, 242, 254, 0.6);
+    border-radius: 50%;
+    background: radial-gradient(circle, transparent 38%, rgba(0, 242, 254, 0.08) 60%, transparent 72%);
+    box-shadow: inset 0 0 20px rgba(0, 242, 254, 0.12), 0 0 22px rgba(112, 0, 255, 0.15);
+    animation: hero-ripple-expand 1.2s ease-out forwards;
+}
+
+.hero-ripple::after {
+    content: '';
+    position: absolute;
+    inset: 22px;
+    border: 1px solid rgba(160, 105, 255, 0.4);
+    border-radius: 50%;
+}
+
+@keyframes hero-ripple-expand {
+    from { transform: scale(0.12); opacity: 0.85; }
+    to { transform: scale(1.5); opacity: 0; }
+}
+
 .hero-motion-toggle {
     display: block;
     margin: 18px 0 0;
@@ -843,6 +878,10 @@ select.cyber-select {
 }
 
 @media (prefers-reduced-motion: reduce) {
+    .hero-ripples {
+        display: none;
+    }
+
     .hero-video {
         visibility: hidden;
     }
@@ -1736,6 +1775,7 @@ select.cyber-select {
                 <video class="hero-video" id="heroVideo" autoplay muted loop playsinline preload="metadata" aria-hidden="true" tabindex="-1">
                     <source src="/assets/videos/neural-plexus-seamless-loop.mp4" type="video/mp4" media="(prefers-reduced-motion: no-preference)">
                 </video>
+                <div class="hero-ripples" aria-hidden="true"></div>
                 <div class="hero-badge">
                     <i class="fa-solid fa-bolt"></i>
                     <span>NEXUS ULTRA V5 | منصة الأدوات السحابية المتقدمة</span>
@@ -2454,9 +2494,48 @@ document.addEventListener('DOMContentLoaded', function() {
         var heroVisible = true;
         heroVideo.muted = true;
 
+        var heroSection = heroVideo.closest('.hero-section');
+        var rippleLayer = heroSection.querySelector('.hero-ripples');
+        var lastRippleTime = -Infinity;
+        var lastRippleX = null;
+        var lastRippleY = null;
+
+        function clearHeroRipples() {
+            rippleLayer.replaceChildren();
+            lastRippleTime = -Infinity;
+            lastRippleX = lastRippleY = null;
+        }
+
+        function createHeroRipple(event) {
+            if (event.pointerType !== 'mouse' && event.pointerType !== 'pen') return;
+            if (reducedMotion.matches || userPaused || document.hidden || !heroVisible) return;
+            var now = performance.now();
+            var rect = rippleLayer.getBoundingClientRect();
+            var x = event.clientX - rect.left;
+            var y = event.clientY - rect.top;
+            if (now - lastRippleTime < 140) return;
+            if (lastRippleX !== null && Math.hypot(x - lastRippleX, y - lastRippleY) < 22) return;
+            lastRippleTime = now;
+            lastRippleX = x;
+            lastRippleY = y;
+            // Bound the decorative DOM even during fast pointer movement.
+            if (rippleLayer.childElementCount >= 8) rippleLayer.firstElementChild.remove();
+            var ripple = document.createElement('span');
+            ripple.className = 'hero-ripple';
+            ripple.style.left = x + 'px';
+            ripple.style.top = y + 'px';
+            ripple.addEventListener('animationend', function() { ripple.remove(); }, { once: true });
+            rippleLayer.appendChild(ripple);
+        }
+
+        heroSection.addEventListener('pointerenter', createHeroRipple, { passive: true });
+        heroSection.addEventListener('pointermove', createHeroRipple, { passive: true });
+        heroSection.addEventListener('pointerleave', clearHeroRipples, { passive: true });
+
         function syncHeroPlayback() {
             motionToggle.hidden = reducedMotion.matches || videoUnavailable || !!heroVideo.error;
             if (reducedMotion.matches || videoUnavailable || userPaused || !heroVisible || document.hidden) {
+                clearHeroRipples();
                 heroVideo.pause();
                 return;
             }
