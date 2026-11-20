@@ -1,3 +1,3 @@
-# Banner is configured in assets/js/ads.js.
+# Banner is configured inline in the HTML pages.
 # Add the exact seller records supplied by your advertising account here.
 # The Banner zoneId is not an ads.txt seller ID.

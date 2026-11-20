@@ -9,3 +9,9 @@ node_modules/
 # OS Metadata
 .DS_Store
 Thumbs.db
+
+# Keep testing and generated standalone frontend scripts out of Git
+/tests/
+/assets/js/
+*.test.js
+*.spec.js
