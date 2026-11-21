@@ -8,8 +8,9 @@ The banner loader and rendering call are embedded directly in each page's HTML. 
 
 - SDK: `https://acscdn.com/script/aclib.js`
 - SDK script element ID: `aclib`
-- Public banner zone ID supplied by the owner: `12474522`
-- Invocation: `window.aclib.runBanner({ zoneId: '12474522', renderIn: '#nexus-banner' })`
+- Public banner zone ID supplied by the owner: `12477534`
+- This replaces the previous display-banner zone. The separately supplied video tag is not installed; no Video.js/IMA dependencies are added. Banner dimensions remain controlled by the provider zone rather than inferred from the numeric ID.
+- Invocation: `window.aclib.runBanner({ zoneId: '12477534', renderIn: '#nexus-banner' })`
 
 The inline loader asynchronously loads the SDK, then calls it with an explicit `renderIn` selector. Placement no longer relies on `document.currentScript` or a dynamically injected second script. The slot establishes a relative positioning context, an isolated stacking context and layout/paint containment, so positioned descendants remain contained instead of covering other tools. This is layout containment, not a security sandbox: provider code running in the page could still append content elsewhere.
 
