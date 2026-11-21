@@ -13,7 +13,7 @@ This is a targeted review of the current repository and local HTTP server, not a
 
 ## Fixes in this branch
 
-- Replace AdSense with the requested fixed-banner integration on all twelve pages, using `runBanner` and zone `12474522`. Pass an explicit `renderIn` selector for the visible, layout-contained slot after the SDK loads; the previous AutoTag call is no longer used. Allow the SDK domain explicitly in CSP without unrestricted network access or removing the existing policy. See `docs/advertising.md` for the unverified provider-runtime dependencies and account-side setup.
+- Replace AdSense with the requested fixed-banner integration on all twelve pages, using `runBanner` and zone `12477534`. Pass an explicit `renderIn` selector for the visible, layout-contained slot after the SDK loads; the previous AutoTag call is no longer used. Allow the SDK domain explicitly in CSP without unrestricted network access or removing the existing policy. See `docs/advertising.md` for the unverified provider-runtime dependencies and account-side setup.
 
 - Add the requested readable password pattern: an initial capital, lowercase syllables, two digits and a final symbol by default (nine characters). Keep a fully random alternative, honor selected character types, regenerate on option changes, and remove absolute strength/cracking-time claims from the password page.
 - Correct the keyboard example from `vj` (رت) to `vf` (رب), yielding exactly **الحمد لله رب العالمين**. Keep the actual key map faithful instead of applying hidden word substitutions.
