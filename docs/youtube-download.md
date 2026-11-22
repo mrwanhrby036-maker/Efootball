@@ -1,0 +1,5 @@
+# YouTube downloads
+
+The thumbnail feature works independently. Video/audio downloads require a Cobalt API instance that you operate or have permission to use; the public `api.cobalt.tools` instance is not intended for use by other projects without permission. Set `COBALT_API_URL` to the instance's HTTPS processing endpoint (normally its root URL), and optionally set `COBALT_API_KEY` for an instance using API-key authentication. Configure these as server-side environment variables in the deployment; for local development export them before `npm start`. Never put the key in browser code. Restart/redeploy after changing the variables.
+
+The server requests Cobalt's `auto` download mode with H.264 and an MP4 container for video (so the service merges video and audio), and makes a separate MP3 request for audio. It only accepts completed `tunnel` or `redirect` responses, not pickers or files requiring local processing. Cobalt or YouTube may reject requests, limit quality, or change availability; a working instance and permitted access to YouTube are prerequisites. Use the downloader only for material you have permission to download.

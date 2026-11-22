@@ -1792,13 +1792,14 @@ select.cyber-select {
                                 <a id="ytDownloadThumb" href="#" target="_blank" rel="noopener noreferrer" class="cyber-btn" style="background: var(--bg-dark); color: var(--text-light); border: 1px solid #ff0000;">
                                     <i class="fa-solid fa-image"></i> تحميل غلاف الفيديو الأصلي (Full HD Thumbnail)
                                 </a>
-                                <a id="ytDownloadVideo" href="#" target="_blank" rel="noopener noreferrer" class="cyber-btn btn-youtube">
+                                <button id="ytDownloadVideo" type="button" class="cyber-btn btn-youtube" onclick="downloadYouTubeMedia('video')">
                                     <i class="fa-solid fa-video"></i> تحميل الفيديو بصيغة MP4
-                                </a>
-                                <a id="ytDownloadAudio" href="#" target="_blank" rel="noopener noreferrer" class="cyber-btn" style="background: var(--bg-dark); color: var(--text-light); border: 1px solid var(--primary);">
+                                </button>
+                                <button id="ytDownloadAudio" type="button" class="cyber-btn" style="background: var(--bg-dark); color: var(--text-light); border: 1px solid var(--primary);" onclick="downloadYouTubeMedia('audio')">
                                     <i class="fa-solid fa-music"></i> تحميل الصوت بصيغة MP3
-                                </a>
+                                </button>
                             </div>
+                            <p id="ytDownloadStatus" role="status" aria-live="polite" style="color: var(--text-dim); margin-top: 12px;"></p>
                         </div>
                     </div>
                 </div>
@@ -2334,81 +2335,78 @@ document.addEventListener('DOMContentLoaded', function() {
 });
     </script>
     <script>
-        function extractYouTubeId(url) {
-            if (!url) return null;
-            var regExp = /^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|shorts\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-            var match = url.match(regExp);
-            return (match && match[2] && match[2].length === 11) ? match[2] : null;
+        var selectedYouTubeVideo = null;
+        var youtubeSelectionVersion = 0;
+
+        function extractYouTubeId(value) {
+            try {
+                var parsed = new URL(value);
+                if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
+                var host = parsed.hostname.toLowerCase();
+                var parts = parsed.pathname.split('/').filter(Boolean);
+                var id = null;
+                if (host === 'youtu.be') id = parts.length === 1 ? parts[0] : null;
+                else if (host === 'youtube.com' || host === 'www.youtube.com' || host === 'm.youtube.com' || host === 'music.youtube.com') {
+                    if (parsed.pathname === '/watch') id = parsed.searchParams.get('v');
+                    else if (parts.length === 2 && ['shorts', 'embed', 'live'].indexOf(parts[0]) !== -1) id = parts[1];
+                }
+                return id && /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : null;
+            } catch (_) { return null; }
         }
 
-        async function processYouTubeVideo() {
-            var urlInput = document.getElementById('youtubeInputUrl');
-            var url = urlInput ? urlInput.value.trim() : '';
-            var quality = document.getElementById('youtubeQuality').value || '720';
-            var btn = document.getElementById('youtubeBtn');
-            var card = document.getElementById('youtubeResultCard');
-
-            var videoId = extractYouTubeId(url);
+        function processYouTubeVideo() {
+            var videoId = extractYouTubeId(document.getElementById('youtubeInputUrl').value.trim());
             if (!videoId) {
-                showToast("يرجى لصق رابط فيديو يوتيوب صحيح!");
+                selectedYouTubeVideo = null;
+                youtubeSelectionVersion++;
+                document.getElementById('youtubeResultCard').style.display = 'none';
+                showToast('يرجى لصق رابط فيديو يوتيوب صحيح!');
                 return;
             }
-
-            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري استخراج البيانات والصور المصغرة...';
-            btn.disabled = true;
-
+            selectedYouTubeVideo = videoId;
+            youtubeSelectionVersion++;
             var thumbUrl = 'https://img.youtube.com/vi/' + videoId + '/maxresdefault.jpg';
             var hqThumbUrl = 'https://img.youtube.com/vi/' + videoId + '/hqdefault.jpg';
-
-            document.getElementById('ytCover').src = thumbUrl;
-            document.getElementById('ytCover').onerror = function() {
+            var cover = document.getElementById('ytCover');
+            cover.onerror = function() {
+                this.onerror = null;
                 this.src = hqThumbUrl;
+                document.getElementById('ytDownloadThumb').href = hqThumbUrl;
             };
-
+            cover.src = thumbUrl;
             document.getElementById('ytTitle').innerText = 'فيديو يوتيوب (ID: ' + videoId + ')';
             document.getElementById('ytVideoId').innerText = 'Video ID: ' + videoId;
             document.getElementById('ytDownloadThumb').href = thumbUrl;
+            document.getElementById('ytDownloadStatus').textContent = 'اختر تحميل الفيديو أو الصوت لتجهيز الملف. قد تكون الجودة الفعلية أقل حسب المتاح.';
+            document.getElementById('youtubeResultCard').style.display = 'grid';
+        }
 
+        async function downloadYouTubeMedia(mode) {
+            if (!selectedYouTubeVideo) return;
+            var videoId = selectedYouTubeVideo;
+            var selectionVersion = youtubeSelectionVersion;
+            var status = document.getElementById('ytDownloadStatus');
+            var buttons = [document.getElementById('ytDownloadVideo'), document.getElementById('ytDownloadAudio')];
+            buttons.forEach(function(button) { button.disabled = true; });
+            status.textContent = 'جاري تجهيز ' + (mode === 'video' ? 'الفيديو' : 'الصوت') + '، يرجى الانتظار...';
             try {
-                var cobaltRes = await fetch('https://api.cobalt.tools/api/json', {
+                var response = await fetch('/api/youtube', {
                     method: 'POST',
-                    headers: {
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        url: url,
-                        vQuality: quality
-                    })
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ videoId: videoId, quality: document.getElementById('youtubeQuality').value || '720', mode: mode })
                 });
-
-                var cobaltData = await cobaltRes.json();
-                if (cobaltData && (cobaltData.status === 'stream' || cobaltData.status === 'redirect' || cobaltData.url)) {
-                    var downloadUrl = cobaltData.url || (cobaltData.picker && cobaltData.picker[0] ? cobaltData.picker[0].url : url);
-                    var audioUrl = cobaltData.audio || downloadUrl;
-
-                    if (isSafeHttpUrl(downloadUrl)) {
-                        document.getElementById('ytDownloadVideo').href = downloadUrl;
-                    }
-                    if (isSafeHttpUrl(audioUrl)) {
-                        document.getElementById('ytDownloadAudio').href = audioUrl;
-                    }
-                } else {
-                    document.getElementById('ytDownloadVideo').href = 'https://loader.to/api/button/?url=' + encodeURIComponent(url);
-                    document.getElementById('ytDownloadAudio').href = 'https://loader.to/api/button/?url=' + encodeURIComponent(url);
+                var data = await response.json();
+                if (selectionVersion !== youtubeSelectionVersion) return;
+                if (!response.ok || !data.url || !isSafeHttpUrl(data.url) || new URL(data.url).protocol !== 'https:') {
+                    throw new Error(data.error || 'تعذر تجهيز التحميل الآن. حاول لاحقاً.');
                 }
-
-                card.style.display = 'grid';
-                showToast("تم جلب تفاصيل الفيديو والغلاف بنجاح!");
-            } catch (err) {
-                document.getElementById('ytDownloadVideo').href = 'https://loader.to/api/button/?url=' + encodeURIComponent(url);
-                document.getElementById('ytDownloadAudio').href = 'https://loader.to/api/button/?url=' + encodeURIComponent(url);
-                card.style.display = 'grid';
-                showToast("تم استخراج الصورة المصغرة بنجاح!");
+                status.textContent = 'تم تجهيز الملف، سيبدأ التحميل الآن.';
+                window.location.assign(data.url);
+            } catch (error) {
+                if (selectionVersion === youtubeSelectionVersion) status.textContent = error.message || 'تعذر الاتصال بخدمة التحميل. حاول لاحقاً.';
+            } finally {
+                buttons.forEach(function(button) { button.disabled = false; });
             }
-
-            btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down"></i> جلب تفاصيل وروابط اليوتيوب';
-            btn.disabled = false;
         }
     </script>
 </body>

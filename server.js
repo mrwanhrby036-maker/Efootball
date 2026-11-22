@@ -28,6 +28,7 @@ const MIME_TYPES = {
 };
 
 const tiktokHandler = require('./api/tiktok.js');
+const youtubeHandler = require('./api/youtube.js');
 
 function isPublicFile(relativePath) {
     const segments = relativePath.split('/');
@@ -55,14 +56,14 @@ const server = http.createServer((req, res) => {
     }
 
     // API handlers execute on the server; their source is never a static asset.
-    if (pathname === '/api/tiktok') {
+    if (pathname === '/api/tiktok' || pathname === '/api/youtube') {
         req.query = parsedUrl.query;
         res.status = code => { res.statusCode = code; return res; };
         res.json = data => {
             res.setHeader('Content-Type', 'application/json; charset=utf-8');
             res.end(JSON.stringify(data));
         };
-        return tiktokHandler(req, res);
+        return (pathname === '/api/tiktok' ? tiktokHandler : youtubeHandler)(req, res);
     }
 
     if (req.method !== 'GET' && req.method !== 'HEAD') {
