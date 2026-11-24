@@ -1,8 +1,75 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
-<url>
-<loc>https://efootball-drab.vercel.app/</loc>
-<lastmod>2026-11-19T13:15:27+00:00</lastmod>
-<priority>1.0000</priority>
-</url>
+  <url>
+    <loc>https://nexus-tools-umber.vercel.app/</loc>
+    <lastmod>2026-11-20T08:00:00+00:00</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://nexus-tools-umber.vercel.app/gold</loc>
+    <lastmod>2026-11-20T08:00:00+00:00</lastmod>
+    <changefreq>hourly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://nexus-tools-umber.vercel.app/tiktok</loc>
+    <lastmod>2026-11-20T08:00:00+00:00</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://nexus-tools-umber.vercel.app/youtube</loc>
+    <lastmod>2026-11-20T08:00:00+00:00</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://nexus-tools-umber.vercel.app/keyboard-fixer</loc>
+    <lastmod>2026-11-20T09:00:00+00:00</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://nexus-tools-umber.vercel.app/names</loc>
+    <lastmod>2026-11-20T08:00:00+00:00</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://nexus-tools-umber.vercel.app/hidden-char</loc>
+    <lastmod>2026-11-20T08:00:00+00:00</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://nexus-tools-umber.vercel.app/whatsapp</loc>
+    <lastmod>2026-11-20T08:00:00+00:00</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://nexus-tools-umber.vercel.app/password</loc>
+    <lastmod>2026-11-20T08:00:00+00:00</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://nexus-tools-umber.vercel.app/age</loc>
+    <lastmod>2026-11-20T08:00:00+00:00</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://nexus-tools-umber.vercel.app/bmi</loc>
+    <lastmod>2026-11-20T08:00:00+00:00</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://nexus-tools-umber.vercel.app/discount</loc>
+    <lastmod>2026-11-20T08:00:00+00:00</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
 </urlset>

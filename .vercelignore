@@ -1,0 +1,9 @@
+# Never include local credentials, repository metadata or development-only files.
+.git
+.env
+.env.*
+node_modules
+server.js
+tests
+docs
+*.log

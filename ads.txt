@@ -1,1 +1,3 @@
-google.com, pub-6717057078707906, DIRECT, f08c47fec0942fa0
+# Banner is configured inline in the HTML pages.
+# Add the exact seller records supplied by your advertising account here.
+# The Banner zoneId is not an ads.txt seller ID.
