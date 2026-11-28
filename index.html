@@ -25,6 +25,7 @@
 
     <!-- Verification & Ads -->
     <meta name="google-site-verification" content="oFipA5OVdHadbanYm0b6JZR6tzlR4H_qsi6xTAYBLWM" />
+    <meta name="monetag" content="b651f8d881eaf048b7554d488f4df12f">
     <!-- Banner advertising is initialized inline at its placement below. -->
 
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%2305070a'/%3E%3Ctext x='50' y='68' font-size='60' text-anchor='middle' fill='%2300f2fe'%3EN%3C/text%3E%3C/svg%3E">
@@ -852,28 +853,6 @@ select.cyber-select {
     opacity: 1;
 }
 
-.hero-motion-toggle {
-    display: block;
-    margin: 18px 0 0;
-    padding: 7px 12px;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    background: rgba(11, 15, 23, 0.85);
-    color: var(--text-light);
-    font: inherit;
-    font-size: 0.8rem;
-    cursor: pointer;
-}
-
-.hero-motion-toggle[hidden] {
-    display: none;
-}
-
-.hero-motion-toggle:focus-visible {
-    outline: 2px solid var(--primary);
-    outline-offset: 4px;
-}
-
 @media (prefers-reduced-motion: reduce) {
     .hero-glow {
         display: none;
@@ -1687,6 +1666,16 @@ select.cyber-select {
             </a>
 
             <div class="nav-category">أدوات الجيمرز والسوشيال</div>
+            <a class="nav-item" href="/image-compressor">
+                <i class="fa-solid fa-file-image" style="color: var(--primary);"></i>
+                <span>ضغط الصور وتقليل الحجم</span>
+                <span class="badge-live">جديد</span>
+            </a>
+            <a class="nav-item" href="/qr-generator">
+                <i class="fa-solid fa-qrcode" style="color: var(--primary);"></i>
+                <span>مولد رموز QR</span>
+                <span class="badge-live">جديد</span>
+            </a>
             <a class="nav-item" href="/keyboard-fixer">
                 <i class="fa-solid fa-keyboard" style="color: var(--primary);"></i>
                 <span>مُصحح الكيبورد المعرب</span>
@@ -1746,6 +1735,8 @@ select.cyber-select {
 
             <!-- Top Navigation Bar Links -->
             <nav class="top-nav-bar" aria-label="شريط التنقل العلوي">
+                <a href="/image-compressor" class="top-nav-link"><i class="fa-solid fa-file-image"></i> ضغط الصور</a>
+                <a href="/qr-generator" class="top-nav-link"><i class="fa-solid fa-qrcode"></i> QR</a>
                 <a href="/gold" class="top-nav-link"><i class="fa-solid fa-coins"></i> الذهب</a>
                 <a href="/tiktok" class="top-nav-link"><i class="fa-brands fa-tiktok"></i> تيك توك</a>
                 <a href="/youtube" class="top-nav-link"><i class="fa-brands fa-youtube"></i> يوتيوب</a>
@@ -1847,7 +1838,6 @@ select.cyber-select {
                         <span>متوافق تماماً مع الجوال</span>
                     </div>
                 </div>
-                <button class="hero-motion-toggle" id="heroMotionToggle" type="button" aria-controls="heroVideo" hidden>إيقاف حركة الخلفية</button>
             </section>
 
             <!-- Tools Section Heading -->
@@ -1998,6 +1988,42 @@ select.cyber-select {
                     </div>
                     <div class="tool-card-footer">
                         <span>توليد كلمة سر قوية</span>
+                        <i class="fa-solid fa-arrow-left"></i>
+                    </div>
+                </a>
+
+                <!-- 12. Image Compressor -->
+                <a href="/image-compressor" class="tool-card">
+                    <div>
+                        <div class="tool-card-header">
+                            <div class="tool-card-icon" style="color: var(--primary);">
+                                <i class="fa-solid fa-file-image"></i>
+                            </div>
+                            <span class="tool-card-tag tag-success">ضغط عالي الجودة</span>
+                        </div>
+                        <h2 class="tool-card-title">ضغط الصور وتقليل الحجم</h2>
+                        <p class="tool-card-desc">قلل حجم صورك بنسبة تصل إلى 90% مع الحفاظ على الجودة العالية، يدعم صيغ JPG, PNG, و WebP مع ضغط فوري وآمن.</p>
+                    </div>
+                    <div class="tool-card-footer">
+                        <span>اضغط صورك الآن</span>
+                        <i class="fa-solid fa-arrow-left"></i>
+                    </div>
+                </a>
+
+                <!-- 13. QR Code Generator -->
+                <a href="/qr-generator" class="tool-card">
+                    <div>
+                        <div class="tool-card-header">
+                            <div class="tool-card-icon" style="color: var(--primary);">
+                                <i class="fa-solid fa-qrcode"></i>
+                            </div>
+                            <span class="tool-card-tag tag-gold">تحميل فوري PNG</span>
+                        </div>
+                        <h2 class="tool-card-title">مولد رموز QR الاحترافي</h2>
+                        <p class="tool-card-desc">حوّل أي رابط، نص، أو وسيلة اتصال إلى رمز QR قابل للمسح والتحميل بجودة عالية لاستخدامه في مطبوعاتك أو موقعك.</p>
+                    </div>
+                    <div class="tool-card-footer">
+                        <span>إنشاء رمز QR</span>
                         <i class="fa-solid fa-arrow-left"></i>
                     </div>
                 </a>
@@ -2539,18 +2565,12 @@ function initCustomCyberSelects() {
 // Global DOM Initialization
 // ─────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function() {
-    // Keep decorative motion limited to the visible hero and respect accessibility preferences.
+    // Keep decorative motion playing as a persistent background element.
     var heroVideo = document.getElementById('heroVideo');
-    var motionToggle = document.getElementById('heroMotionToggle');
-    if (heroVideo && motionToggle) {
-        var reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-        var userPaused = false;
-        var videoUnavailable = false;
-        var heroVisible = true;
+    if (heroVideo) {
         heroVideo.muted = true;
-
         var heroSection = heroVideo.closest('.hero-section');
-        var glow = heroSection.querySelector('.hero-glow');
+        var glow = heroSection ? heroSection.querySelector('.hero-glow') : null;
         var glowFrame = null;
         var glowX = 0;
         var glowY = 0;
@@ -2558,16 +2578,15 @@ document.addEventListener('DOMContentLoaded', function() {
         function hideHeroGlow() {
             if (glowFrame !== null) cancelAnimationFrame(glowFrame);
             glowFrame = null;
-            glow.classList.remove('is-active');
+            if (glow) glow.classList.remove('is-active');
         }
 
         function updateHeroGlow(event) {
-            if (event.pointerType !== 'mouse' && event.pointerType !== 'pen') return;
-            if (reducedMotion.matches || userPaused || document.hidden || !heroVisible) return;
+            if (!glow || (event.pointerType !== 'mouse' && event.pointerType !== 'pen')) return;
+            if (document.hidden) return;
             var rect = heroSection.getBoundingClientRect();
             glowX = event.clientX - rect.left - heroSection.clientLeft - 260;
             glowY = event.clientY - rect.top - heroSection.clientTop - 260;
-            // Coalesce pointer events into one update per frame, with no idle animation loop.
             if (glowFrame !== null) return;
             glowFrame = requestAnimationFrame(function() {
                 glowFrame = null;
@@ -2576,51 +2595,29 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
 
-        heroSection.addEventListener('pointerenter', updateHeroGlow, { passive: true });
-        heroSection.addEventListener('pointermove', updateHeroGlow, { passive: true });
-        heroSection.addEventListener('pointerleave', hideHeroGlow, { passive: true });
-        heroSection.addEventListener('pointercancel', hideHeroGlow, { passive: true });
+        if (heroSection) {
+            heroSection.addEventListener('pointerenter', updateHeroGlow, { passive: true });
+            heroSection.addEventListener('pointermove', updateHeroGlow, { passive: true });
+            heroSection.addEventListener('pointerleave', hideHeroGlow, { passive: true });
+            heroSection.addEventListener('pointercancel', hideHeroGlow, { passive: true });
+        }
 
-        function syncHeroPlayback() {
-            motionToggle.hidden = reducedMotion.matches || videoUnavailable || !!heroVideo.error;
-            if (reducedMotion.matches || videoUnavailable || userPaused || !heroVisible || document.hidden) {
-                hideHeroGlow();
-                heroVideo.pause();
-                return;
-            }
+        function playHeroVideo() {
             var playRequest = heroVideo.play();
             if (playRequest) playRequest.catch(function() {
-                // Autoplay may be blocked; leave the static dark background usable.
+                // Autoplay may be blocked; leave static background
             });
         }
 
-        heroVideo.addEventListener('play', function() {
-            motionToggle.textContent = 'إيقاف حركة الخلفية';
+        playHeroVideo();
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) {
+                heroVideo.pause();
+                hideHeroGlow();
+            } else {
+                playHeroVideo();
+            }
         });
-        heroVideo.addEventListener('pause', function() {
-            motionToggle.textContent = 'تشغيل حركة الخلفية';
-        });
-        function handleVideoError() {
-            videoUnavailable = true;
-            heroVideo.pause();
-            motionToggle.hidden = true;
-        }
-        heroVideo.addEventListener('error', handleVideoError);
-        // Source errors do not bubble to the video element.
-        heroVideo.querySelector('source').addEventListener('error', handleVideoError);
-        motionToggle.addEventListener('click', function() {
-            userPaused = !heroVideo.paused;
-            syncHeroPlayback();
-        });
-        reducedMotion.addEventListener('change', syncHeroPlayback);
-        document.addEventListener('visibilitychange', syncHeroPlayback);
-        if ('IntersectionObserver' in window) {
-            new IntersectionObserver(function(entries) {
-                heroVisible = entries[0].isIntersecting;
-                syncHeroPlayback();
-            }).observe(heroVideo.closest('.hero-section'));
-        }
-        syncHeroPlayback();
     }
 
     // Populate ticker with instant fallback to avoid delay or NaN

@@ -25,6 +25,7 @@
 
     <!-- Verification & Ads -->
     <meta name="google-site-verification" content="oFipA5OVdHadbanYm0b6JZR6tzlR4H_qsi6xTAYBLWM" />
+    <meta name="monetag" content="b651f8d881eaf048b7554d488f4df12f">
     <!-- Banner advertising is initialized inline at its placement below. -->
 
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%2305070a'/%3E%3Ctext x='50' y='68' font-size='60' text-anchor='middle' fill='%2300f2fe'%3E%D8%B9%3C/text%3E%3C/svg%3E">
@@ -2343,18 +2344,33 @@ document.addEventListener('DOMContentLoaded', function() {
 
         function getZodiacSign(day, month) {
             // month: 1 to 12
-            if ((month == 3 && day >= 21) || (month == 4 && day <= 19)) return { name: 'برج الحمل ♈', symbol: 'ناري (21 مارس - 19 أبريل)' };
-            if ((month == 4 && day >= 20) || (month == 5 && day <= 20)) return { name: 'برج الثور ♉', symbol: 'ترابي (20 أبريل - 20 مايو)' };
-            if ((month == 5 && day >= 21) || (month == 6 && day <= 20)) return { name: 'برج الجوزاء ♊', symbol: 'هوائي (21 مايو - 20 يونيو)' };
-            if ((month == 6 && day >= 21) || (month == 7 && day <= 22)) return { name: 'برج السرطان ♋', symbol: 'مائي (21 يونيو - 22 يوليو)' };
-            if ((month == 7 && day >= 23) || (month == 8 && day <= 22)) return { name: 'برج الأسد ♌', symbol: 'ناري (23 يوليو - 22 أغسطس)' };
-            if ((month == 8 && day >= 23) || (month == 9 && day <= 22)) return { name: 'برج العذراء ♍', symbol: 'ترابي (23 أغسطس - 22 سبتمبر)' };
-            if ((month == 9 && day >= 23) || (month == 10 && day <= 22)) return { name: 'برج الميزان ♎', symbol: 'هوائي (23 سبتمبر - 22 أكتوبر)' };
-            if ((month == 10 && day >= 23) || (month == 11 && day <= 21)) return { name: 'برج العقرب ♏', symbol: 'مائي (23 أكتوبر - 21 نوفمبر)' };
-            if ((month == 11 && day >= 22) || (month == 12 && day <= 21)) return { name: 'برج القوس ♐', symbol: 'ناري (22 نوفمبر - 21 ديسمبر)' };
-            if ((month == 12 && day >= 22) || (month == 1 && day <= 19)) return { name: 'برج الجدي ♑', symbol: 'ترابي (22 ديسمبر - 19 يناير)' };
-            if ((month == 1 && day >= 20) || (month == 2 && day <= 18)) return { name: 'برج الدلو ♒', symbol: 'هوائي (20 يناير - 18 فبراير)' };
-            return { name: 'برج الحوت ♓', symbol: 'مائي (19 فبراير - 20 مارس)' };
+            const svgs = {
+                aries: `<svg width="32" height="32" viewBox="0 0 100 100" fill="none" stroke="#ec4899" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 6px rgba(236,72,153,0.5)); vertical-align: middle; display: inline-block; margin-left: 6px;"><path d="M30 70 C15 50, 20 25, 45 30 C55 32, 50 60, 50 90"/><path d="M70 70 C85 50, 80 25, 55 30"/></svg>`,
+                taurus: `<svg width="32" height="32" viewBox="0 0 100 100" fill="none" stroke="#f59e0b" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 6px rgba(245,158,11,0.5)); vertical-align: middle; display: inline-block; margin-left: 6px;"><circle cx="50" cy="60" r="25"/><path d="M25 30 C30 15, 40 10, 50 25 C60 10, 70 15, 75 30"/></svg>`,
+                gemini: `<svg width="32" height="32" viewBox="0 0 100 100" fill="none" stroke="#00f2fe" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 6px rgba(0,242,254,0.5)); vertical-align: middle; display: inline-block; margin-left: 6px;"><path d="M25 20 L75 20"/><path d="M25 80 L75 80"/><path d="M38 20 L38 80"/><path d="M62 20 L62 80"/></svg>`,
+                cancer: `<svg width="32" height="32" viewBox="0 0 100 100" fill="none" stroke="#4facfe" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 6px rgba(79,172,254,0.5)); vertical-align: middle; display: inline-block; margin-left: 6px;"><circle cx="35" cy="40" r="15"/><path d="M35 25 C60 15, 75 40, 50 55"/><circle cx="65" cy="60" r="15"/><path d="M65 75 C40 85, 25 60, 50 45"/></svg>`,
+                leo: `<svg width="32" height="32" viewBox="0 0 100 100" fill="none" stroke="#f59e0b" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 6px rgba(245,158,11,0.5)); vertical-align: middle; display: inline-block; margin-left: 6px;"><circle cx="40" cy="60" r="20"/><path d="M55 45 C75 45, 85 60, 70 75 C60 85, 45 80, 45 80"/><path d="M20 70 C10 60, 15 40, 30 35"/></svg>`,
+                virgo: `<svg width="32" height="32" viewBox="0 0 100 100" fill="none" stroke="#10b981" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 6px rgba(16,185,129,0.5)); vertical-align: middle; display: inline-block; margin-left: 6px;"><path d="M20 20 L20 80"/><path d="M40 20 L40 70 C40 80, 55 80, 55 70 L55 20"/><path d="M65 20 L65 70 C65 85, 85 85, 85 65 L85 20"/></svg>`,
+                libra: `<svg width="32" height="32" viewBox="0 0 100 100" fill="none" stroke="#8b5cf6" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 6px rgba(139,92,246,0.5)); vertical-align: middle; display: inline-block; margin-left: 6px;"><path d="M20 75 L80 75"/><path d="M25 55 L75 55"/><path d="M50 30 C35 30, 30 45, 30 55"/><path d="M50 30 C65 30, 70 45, 70 55"/></svg>`,
+                scorpio: `<svg width="32" height="32" viewBox="0 0 100 100" fill="none" stroke="#ef4444" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 6px rgba(239,68,68,0.5)); vertical-align: middle; display: inline-block; margin-left: 6px;"><path d="M20 20 L20 80"/><path d="M40 20 L40 80"/><path d="M60 20 L60 70 C60 82, 75 85, 80 75 L85 65"/><path d="M72 68 L80 75 L85 65"/></svg>`,
+                sagittarius: `<svg width="32" height="32" viewBox="0 0 100 100" fill="none" stroke="#ff0050" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 6px rgba(255,0,80,0.5)); vertical-align: middle; display: inline-block; margin-left: 6px;"><path d="M25 75 L75 25"/><path d="M50 25 L75 25 L75 50"/><path d="M35 55 L55 35"/></svg>`,
+                capricorn: `<svg width="32" height="32" viewBox="0 0 100 100" fill="none" stroke="#f59e0b" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 6px rgba(245,158,11,0.5)); vertical-align: middle; display: inline-block; margin-left: 6px;"><path d="M20 20 L20 60 C20 75, 35 80, 45 70 L55 60 C65 50, 75 30, 85 45 C90 55, 85 70, 75 80"/></svg>`,
+                aquarius: `<svg width="32" height="32" viewBox="0 0 100 100" fill="none" stroke="#00f2fe" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 6px rgba(0,242,254,0.5)); vertical-align: middle; display: inline-block; margin-left: 6px;"><path d="M15 40 Q30 30, 50 40 Q70 50, 85 40"/><path d="M15 65 Q30 55, 50 65 Q70 75, 85 65"/></svg>`,
+                pisces: `<svg width="32" height="32" viewBox="0 0 100 100" fill="none" stroke="#4facfe" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 6px rgba(79,172,254,0.5)); vertical-align: middle; display: inline-block; margin-left: 6px;"><path d="M25 20 C45 40, 45 60, 25 80"/><path d="M75 20 C55 40, 55 60, 75 80"/><path d="M15 50 L85 50"/></svg>`
+            };
+
+            if ((month == 3 && day >= 21) || (month == 4 && day <= 19)) return { name: 'برج الحمل', svg: svgs.aries, symbol: 'ناري (21 مارس - 19 أبريل)' };
+            if ((month == 4 && day >= 20) || (month == 5 && day <= 20)) return { name: 'برج الثور', svg: svgs.taurus, symbol: 'ترابي (20 أبريل - 20 مايو)' };
+            if ((month == 5 && day >= 21) || (month == 6 && day <= 20)) return { name: 'برج الجوزاء', svg: svgs.gemini, symbol: 'هوائي (21 مايو - 20 يونيو)' };
+            if ((month == 6 && day >= 21) || (month == 7 && day <= 22)) return { name: 'برج السرطان', svg: svgs.cancer, symbol: 'مائي (21 يونيو - 22 يوليو)' };
+            if ((month == 7 && day >= 23) || (month == 8 && day <= 22)) return { name: 'برج الأسد', svg: svgs.leo, symbol: 'ناري (23 يوليو - 22 أغسطس)' };
+            if ((month == 8 && day >= 23) || (month == 9 && day <= 22)) return { name: 'برج العذراء', svg: svgs.virgo, symbol: 'ترابي (23 أغسطس - 22 سبتمبر)' };
+            if ((month == 9 && day >= 23) || (month == 10 && day <= 22)) return { name: 'برج الميزان', svg: svgs.libra, symbol: 'هوائي (23 سبتمبر - 22 أكتوبر)' };
+            if ((month == 10 && day >= 23) || (month == 11 && day <= 21)) return { name: 'برج العقرب', svg: svgs.scorpio, symbol: 'مائي (23 أكتوبر - 21 نوفمبر)' };
+            if ((month == 11 && day >= 22) || (month == 12 && day <= 21)) return { name: 'برج القوس', svg: svgs.sagittarius, symbol: 'ناري (22 نوفمبر - 21 ديسمبر)' };
+            if ((month == 12 && day >= 22) || (month == 1 && day <= 19)) return { name: 'برج الجدي', svg: svgs.capricorn, symbol: 'ترابي (22 ديسمبر - 19 يناير)' };
+            if ((month == 1 && day >= 20) || (month == 2 && day <= 18)) return { name: 'برج الدلو', svg: svgs.aquarius, symbol: 'هوائي (20 يناير - 18 فبراير)' };
+            return { name: 'برج الحوت', svg: svgs.pisces, symbol: 'مائي (19 فبراير - 20 مارس)' };
         }
 
         function calcComprehensiveAge() {
@@ -2424,7 +2440,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             document.getElementById('resBirthDayOfWeek').innerText = birthDayName;
-            document.getElementById('resZodiac').innerText = zodiac.name;
+            document.getElementById('resZodiac').innerHTML = (zodiac.svg || '') + ' <span style="vertical-align: middle;">' + zodiac.name + '</span>';
             document.getElementById('resZodiacSymbol').innerText = zodiac.symbol;
 
             document.getElementById('ageResultsArea').style.display = 'block';
